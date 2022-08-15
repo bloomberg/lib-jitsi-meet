@@ -376,11 +376,8 @@ export default class XmppConnection extends Listenable {
      */
     _keepAliveAndCheckShard() {
         const { shard, websocketKeepAliveUrl } = this._options;
-        // #bloomberg #shard @rpang27 get shard id from prosody
-        // const url = websocketKeepAliveUrl ? websocketKeepAliveUrl
-        //     : this.service.replace('wss://', 'https://').replace('ws://', 'http://');
-        const url = '/shard';
-        // #end
+        const url = websocketKeepAliveUrl ? websocketKeepAliveUrl
+            : this.service.replace('wss://', 'https://').replace('ws://', 'http://');
         return fetch(url)
             .then(response => {
             // skips header checking if there is no info in options
