@@ -433,16 +433,37 @@ export default class XmppConnection extends Listenable {
         const url = websocketKeepAliveUrl ? websocketKeepAliveUrl
             : this.service.replace('wss://', 'https://').replace('ws://', 'http://');
 
-        return fetch(url)
+        // #bloomberg #shard @rpang27 use prosody url to get shard
+        
+        // return fetch(url)
+        //     .then(response => {
+        //         // skips header checking if there is no info in options
+        //         if (!shard) {
+        //             return;
+        //         }
+                
+        //         const responseShard = response.headers.get('x-jitsi-shard');
+                
+        //         if (responseShard !== shard) {
+        //             logger.error(
+        //                 `Detected that shard changed from ${shard} to ${responseShard}`);
+        //                 this.eventEmitter.emit(XmppConnection.Events.CONN_SHARD_CHANGED);
+        //             }
+        //     })
+        //     .catch(error => {
+        //         logger.error(`Websocket Keep alive failed for url: ${url}`, { error });
+        //     });
+        
+        
+        const keepAlivePromise = fetch(url)
+        .catch(error => {
+            logger.error(`Websocket Keep alive failed for url: ${url}`, { error });
+        });
+        
+        const getShardUrl = this.service.replace('wss://', 'https://').replace('ws://', 'http://').replace('xmpp-websocket', 'shard');
+        const shardDetectionPromise = fetch(getShardUrl)
             .then(response => {
-
-                // skips header checking if there is no info in options
-                if (!shard) {
-                    return;
-                }
-
                 const responseShard = response.headers.get('x-jitsi-shard');
-
                 if (responseShard !== shard) {
                     logger.error(
                         `Detected that shard changed from ${shard} to ${responseShard}`);
@@ -450,8 +471,17 @@ export default class XmppConnection extends Listenable {
                 }
             })
             .catch(error => {
-                logger.error(`Websocket Keep alive failed for url: ${url}`, { error });
+                logger.error(`Get shard from prosody failed for url: ${getShardUrl}`, { error });
             });
+
+
+        if (!shard) {
+            return keepAlivePromise;
+        } else {
+            return Promise.allSettled([keepAlivePromise, shardDetectionPromise]);
+        }
+
+        // #end
     }
 
     /**
