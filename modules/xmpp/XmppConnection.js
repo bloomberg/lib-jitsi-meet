@@ -454,31 +454,33 @@ export default class XmppConnection extends Listenable {
         //         logger.error(`Websocket Keep alive failed for url: ${url}`, { error });
         //     });
         
+        
+        const keepAlivePromise = fetch(url)
+        .catch(error => {
+            logger.error(`Websocket Keep alive failed for url: ${url}`, { error });
+        });
+        
         const getShardUrl = this.service.replace('wss://', 'https://').replace('ws://', 'http://').replace('xmpp-websocket', 'shard');
-        
-        const promise = fetch(url)
+        const shardDetectionPromise = fetch(getShardUrl)
+            .then(response => {
+                const responseShard = response.headers.get('x-jitsi-shard');
+                if (responseShard !== shard) {
+                    logger.error(
+                        `Detected that shard changed from ${shard} to ${responseShard}`);
+                    this.eventEmitter.emit(XmppConnection.Events.CONN_SHARD_CHANGED);
+                }
+            })
             .catch(error => {
-                logger.error(`Websocket Keep alive failed for url: ${url}`, { error });
+                logger.error(`Get shard from prosody failed for url: ${getShardUrl}`, { error });
             });
-        
+
+
         if (!shard) {
-            return promise;
+            return keepAlivePromise;
         } else {
-            return promise
-                .then(() => fetch(getShardUrl))
-                .then(response => {
-                    const responseShard = response.headers.get('x-jitsi-shard');
-                    if (responseShard !== shard) {
-                        logger.error(
-                            `Detected that shard changed from ${shard} to ${responseShard}`);
-                        this.eventEmitter.emit(XmppConnection.Events.CONN_SHARD_CHANGED);
-                    }
-                })
-                .catch(error => {
-                    logger.error(`Get shard from prosody failed for url: ${getShardUrl}`, { error });
-                });
+            return Promise.allSettled([keepAlivePromise, shardDetectionPromise]);
         }
-           
+
         // #end
     }
 
