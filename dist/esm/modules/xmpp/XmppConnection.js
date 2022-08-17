@@ -378,43 +378,45 @@ export default class XmppConnection extends Listenable {
         const { shard, websocketKeepAliveUrl } = this._options;
         const url = websocketKeepAliveUrl ? websocketKeepAliveUrl
             : this.service.replace('wss://', 'https://').replace('ws://', 'http://');
-        // #bloomberg #shard @rpang27 use prodody url to get shard
+        // #bloomberg #shard @rpang27 use prosody url to get shard
+        // return fetch(url)
+        //     .then(response => {
+        //         // skips header checking if there is no info in options
+        //         if (!shard) {
+        //             return;
+        //         }
+        //         const responseShard = response.headers.get('x-jitsi-shard');
+        //         if (responseShard !== shard) {
+        //             logger.error(
+        //                 `Detected that shard changed from ${shard} to ${responseShard}`);
+        //                 this.eventEmitter.emit(XmppConnection.Events.CONN_SHARD_CHANGED);
+        //             }
+        //     })
+        //     .catch(error => {
+        //         logger.error(`Websocket Keep alive failed for url: ${url}`, { error });
+        //     });
         const getShardUrl = this.service.replace('wss://', 'https://').replace('ws://', 'http://').replace('xmpp-websocket', 'shard');
-        // #end
-        return fetch(url)
-            // #bloomberg #shard @rpang27 do not check shard from keep alive response
-            // .then(response => {
-            //     // skips header checking if there is no info in options
-            //     if (!shard) {
-            //         return;
-            //     }
-            //     const responseShard = response.headers.get('x-jitsi-shard');
-            //     if (responseShard !== shard) {
-            //         logger.error(
-            //             `Detected that shard changed from ${shard} to ${responseShard}`);
-            //             this.eventEmitter.emit(XmppConnection.Events.CONN_SHARD_CHANGED);
-            //         }
-            // })
-            // #end
+        const promise = fetch(url)
             .catch(error => {
             logger.error(`Websocket Keep alive failed for url: ${url}`, { error });
-        })
-            // #bloomberg #shard @rpang27 check shard from prosody response
-            .then(() => fetch(getShardUrl))
-            .then(response => {
-            // skips header checking if there is no info in options
-            if (!shard) {
-                return;
-            }
-            const responseShard = response.headers.get('x-jitsi-shard');
-            if (responseShard !== shard) {
-                logger.error(`Detected that shard changed from ${shard} to ${responseShard}`);
-                this.eventEmitter.emit(XmppConnection.Events.CONN_SHARD_CHANGED);
-            }
-        })
-            .catch(error => {
-            logger.error(`Get shard from prosody failed for url: ${getShardUrl}`, { error });
         });
+        if (!shard) {
+            return promise;
+        }
+        else {
+            return promise
+                .then(() => fetch(getShardUrl))
+                .then(response => {
+                const responseShard = response.headers.get('x-jitsi-shard');
+                if (responseShard !== shard) {
+                    logger.error(`Detected that shard changed from ${shard} to ${responseShard}`);
+                    this.eventEmitter.emit(XmppConnection.Events.CONN_SHARD_CHANGED);
+                }
+            })
+                .catch(error => {
+                logger.error(`Get shard from prosody failed for url: ${getShardUrl}`, { error });
+            });
+        }
         // #end
     }
     /**
