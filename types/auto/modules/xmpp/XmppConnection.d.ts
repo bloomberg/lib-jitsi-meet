@@ -228,6 +228,14 @@ export default class XmppConnection extends Listenable {
     private _maybeStartWSKeepAlive;
     _wsKeepAlive: NodeJS.Timeout;
     /**
+     * Find token passed as query param in the given URL for shard detection.
+     */
+    _getTokenFromKeepAliveAndCheckShardUrl(url: any): string;
+    /**
+     * Decode token passed as query param in the shard detection URL.
+     */
+    _decodeTokenFromKeepAliveAndCheckShardUrl(url: any): unknown;
+    /**
      * Do a http GET to the shard and if shard change will throw an event.
      *
      * @private
