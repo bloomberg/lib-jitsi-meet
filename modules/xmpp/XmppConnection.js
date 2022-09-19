@@ -1,6 +1,8 @@
 import { getLogger } from '@jitsi/logger';
 import { $pres, Strophe } from 'strophe.js';
 import 'strophejs-plugin-stream-management';
+import { v4 as uuidv4 } from 'uuid'; // #bloomberg #shard @araje Pass request headers for debugging
+import jwt_decode from "jwt-decode"; // #bloomberg #shard @araje Pass request headers for debugging
 
 import Listenable from '../util/Listenable';
 
@@ -422,6 +424,47 @@ export default class XmppConnection extends Listenable {
         }
     }
 
+    // #bloomberg #shard @araje Get token query param from shard detection URL
+    /**
+     * Find token passed as query param in the given URL for shard detection.
+     */
+     _keepAliveAndCheckShardToken(url) {
+        try {
+            const keepAliveAndCheckShardUrl = new URL(url);
+
+            return keepAliveAndCheckShardUrl.searchParams.get('token');
+        } catch (err) {
+
+            return null;
+        }
+    }
+
+    // #end
+
+    // #bloomberg #shard @araje Decode token query param from shard detection URL
+    /**
+     * Decode token passed as query param in the shard detection URL.
+     */
+    _decodeKeepAliveAndCheckShardToken(url) {
+        const token = this._keepAliveAndCheckShardToken(url);
+
+        if (!token) {
+
+            return null;
+        }
+
+        try {
+            const decodedToken = jwt_decode(token);
+
+            return decodedToken || null;
+        } catch (err) {
+
+            return null;
+        }
+    }
+
+    // #end
+
     /**
      * Do a http GET to the shard and if shard change will throw an event.
      *
@@ -432,16 +475,41 @@ export default class XmppConnection extends Listenable {
         const { shard, websocketKeepAliveUrl } = this._options;
         const url = websocketKeepAliveUrl ? websocketKeepAliveUrl
             : this.service.replace('wss://', 'https://').replace('ws://', 'http://');
-        
-        return fetch(url)
+
+        // #bloomberg #shard @araje Pass request headers for debugging
+        const traceId = uuidv4();
+
+        // Debugging info for shard detection
+        logger.info(`[REQUEST ${traceId}] GET ${url}`);
+
+        const decodedToken = this._decodeKeepAliveAndCheckShardToken(url);
+
+        const requestHeaders = {
+            'Content-Type': 'application/json',
+            'X-Trace-Id': traceId,
+            'X-User-Id': decodedToken ? decodedToken.uuid : 'NO_UUID'
+        };
+
+        // #end
+
+        // #bloomberg #shard @araje Pass request headers for debugging
+        // return fetch(url)
+        return fetch(url, requestHeaders)
+
+        // #end
             .then(response => {
+                // #bloomberg #shard @araje Debugging info for shard detection
+                logger.info(`[RESPONSE ${traceId}] GET ${url} ${response?.status}`);
+
+                // #end
+
                 // skips header checking if there is no info in options
                 if (!shard) {
                     return;
                 }
-                
+
                 const responseShard = response.headers.get('x-jitsi-shard');
-                
+
                 if (responseShard !== shard) {
                     logger.error(
                         `Detected that shard changed from ${shard} to ${responseShard}`);
