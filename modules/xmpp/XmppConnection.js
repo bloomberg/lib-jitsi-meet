@@ -487,9 +487,6 @@ export default class XmppConnection extends Listenable {
             'X-User-Id': decodedToken ? decodedToken.uuid : 'NO_UUID'
         };
 
-        // #end
-
-        // #bloomberg #shard @araje Pass request headers for debugging
         // return fetch(url)
         return fetch(url, requestHeaders)
 
