@@ -428,7 +428,7 @@ export default class XmppConnection extends Listenable {
     /**
      * Find token passed as query param in the given URL for shard detection.
      */
-     _keepAliveAndCheckShardToken(url) {
+     _getTokenFromKeepAliveAndCheckShardUrl(url) {
         try {
             const keepAliveAndCheckShardUrl = new URL(url);
 
@@ -445,8 +445,8 @@ export default class XmppConnection extends Listenable {
     /**
      * Decode token passed as query param in the shard detection URL.
      */
-    _decodeKeepAliveAndCheckShardToken(url) {
-        const token = this._keepAliveAndCheckShardToken(url);
+    _decodeTokenFromKeepAliveAndCheckShardUrl(url) {
+        const token = this._getTokenFromKeepAliveAndCheckShardUrl(url);
 
         if (!token) {
 
@@ -482,7 +482,7 @@ export default class XmppConnection extends Listenable {
         // Debugging info for shard detection
         logger.info(`[REQUEST ${traceId}] GET ${url}`);
 
-        const decodedToken = this._decodeKeepAliveAndCheckShardToken(url);
+        const decodedToken = this._decodeTokenFromKeepAliveAndCheckShardUrl(url);
 
         const requestHeaders = {
             'Content-Type': 'application/json',
