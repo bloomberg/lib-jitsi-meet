@@ -439,9 +439,6 @@ export default class XmppConnection extends Listenable {
         }
     }
 
-    // #end
-
-    // #bloomberg #shard @araje Decode token query param from shard detection URL
     /**
      * Decode token passed as query param in the shard detection URL.
      */
