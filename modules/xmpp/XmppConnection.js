@@ -517,6 +517,11 @@ export default class XmppConnection extends Listenable {
                     }
             })
             .catch(error => {
+                // #bloomberg #shard @araje Debugging info for shard detection
+                logger.error(`[ERROR ${traceId}] GET ${url} Error: `, { error });
+
+                // #end
+
                 logger.error(`Websocket Keep alive failed for url: ${url}`, { error });
             });
     }
