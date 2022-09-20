@@ -414,14 +414,16 @@ export default class XmppConnection extends Listenable {
         const traceId = uuidv4();
         // Debugging info for shard detection
         logger.info(`[REQUEST ${traceId}] GET ${url}`);
-        const decodedToken = this._decodeTokenFromKeepAliveAndCheckShardUrl(url);
-        const requestHeaders = {
+        const headers = {
             'Content-Type': 'application/json',
             'X-Trace-Id': traceId,
-            'X-User-Id': decodedToken ? decodedToken.uuid : 'NO_UUID'
         };
+        const decodedToken = this._decodeTokenFromKeepAliveAndCheckShardUrl(url);
+        if (decodedToken === null || decodedToken === void 0 ? void 0 : decodedToken.uuid) {
+            headers['X-User-Id'] = decodedToken === null || decodedToken === void 0 ? void 0 : decodedToken.uuid;
+        }
         // return fetch(url)
-        return fetch(url, requestHeaders)
+        return fetch(url, { headers })
             // #end
             .then(response => {
             // #bloomberg #shard @araje Debugging info for shard detection
