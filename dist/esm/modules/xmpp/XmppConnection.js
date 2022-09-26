@@ -376,8 +376,8 @@ export default class XmppConnection extends Listenable {
      */
     _getTokenFromKeepAliveAndCheckShardUrl(url) {
         try {
-            const keepAliveAndCheckShardUrl = new URL(url);
-            return keepAliveAndCheckShardUrl.searchParams.get('token');
+            const keepAliveAndCheckShardUrlSearchParams = new URLSearchParams(url.split('?')[1]);
+            return keepAliveAndCheckShardUrlSearchParams.get('token');
         }
         catch (err) {
             return null;
