@@ -916,7 +916,14 @@ JitsiConference.prototype.addTrack = function (track) {
         if (track === localTracks[0]) {
             return Promise.resolve(track);
         }
-        if (FeatureFlags.isMultiStreamSupportEnabled() && mediaType === MediaType.VIDEO) {
+        // #bloomberg @araje Urgent patch to fix issues with camera stream shown even after muting locally
+        // Currently, only adding multiple video streams of different video types is supported.
+        // TODO - remove this limitation once issues with jitsi-meet trying to add multiple camera streams is fixed.
+        // if (FeatureFlags.isMultiStreamSupportEnabled() && mediaType === MediaType.VIDEO) {
+        if (FeatureFlags.isMultiStreamSupportEnabled()
+            && mediaType === MediaType.VIDEO
+            && !localTracks.find(t => t.getVideoType() === track.getVideoType())) {
+            // #end
             const addTrackPromises = [];
             this.p2pJingleSession && addTrackPromises.push(this.p2pJingleSession.addTracks([track]));
             this.jvbJingleSession && addTrackPromises.push(this.jvbJingleSession.addTracks([track]));
