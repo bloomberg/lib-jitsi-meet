@@ -3484,4 +3484,13 @@ JitsiConference.prototype.getBreakoutRooms = function () {
     var _a;
     return (_a = this.room) === null || _a === void 0 ? void 0 : _a.getBreakoutRooms();
 };
+/**
+ * Returns the metadata handler object.
+ *
+ * @returns {Object} the room metadata handler.
+ */
+JitsiConference.prototype.getMetadataHandler = function () {
+    var _a;
+    return (_a = this.room) === null || _a === void 0 ? void 0 : _a.getMetadataHandler();
+};
 //# sourceMappingURL=JitsiConference.js.map
