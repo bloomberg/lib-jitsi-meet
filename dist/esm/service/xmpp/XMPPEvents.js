@@ -259,6 +259,14 @@ export var XMPPEvents;
      * Event fired when the breakout rooms data was updated.
      */
     XMPPEvents["BREAKOUT_ROOMS_UPDATED"] = "xmpp.breakout-rooms.updated";
+    /**
+     * Event fired when we receive a message related to room metadata.
+     */
+    XMPPEvents["ROOM_METADATA_EVENT"] = "xmpp.room-metadata.event";
+    /**
+     * Event fired when we receive a message related to room metadata.
+     */
+    XMPPEvents["ROOM_METADATA_UPDATED"] = "xmpp.room-metadata.updated";
     // Designates an event indicating that we should join the conference with
     // audio and/or video muted.
     XMPPEvents["START_MUTED_FROM_FOCUS"] = "xmpp.start_muted_from_focus";

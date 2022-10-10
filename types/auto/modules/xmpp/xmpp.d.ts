@@ -65,6 +65,7 @@ export default class XMPP extends Listenable {
     };
     token: any;
     authenticatedUser: boolean;
+    _components: any[];
     caps: Caps;
     /**
      * Initializes the list of feature advertised through the disco-info
@@ -110,6 +111,7 @@ export default class XMPP extends Listenable {
     conferenceDurationComponentAddress: any;
     lobbySupported: boolean;
     breakoutRoomsComponentAddress: any;
+    roomMetadataComponentAddress: any;
     /**
     * Parses a raw failure xmpp xml message received on auth failed.
     *

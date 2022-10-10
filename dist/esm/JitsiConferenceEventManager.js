@@ -280,6 +280,8 @@ JitsiConferenceEventManager.prototype.setupChatRoomListeners = function () {
     // Breakout rooms.
     this.chatRoomForwarder.forward(XMPPEvents.BREAKOUT_ROOMS_MOVE_TO_ROOM, JitsiConferenceEvents.BREAKOUT_ROOMS_MOVE_TO_ROOM);
     this.chatRoomForwarder.forward(XMPPEvents.BREAKOUT_ROOMS_UPDATED, JitsiConferenceEvents.BREAKOUT_ROOMS_UPDATED);
+    // Room metadata.
+    this.chatRoomForwarder.forward(XMPPEvents.ROOM_METADATA_UPDATED, JitsiConferenceEvents.METADATA_UPDATED);
 };
 /**
  * Setups event listeners related to conference.rtc

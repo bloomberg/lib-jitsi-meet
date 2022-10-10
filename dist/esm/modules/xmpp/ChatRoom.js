@@ -11,6 +11,7 @@ import Listenable from '../util/Listenable';
 import AVModeration from './AVModeration';
 import BreakoutRooms from './BreakoutRooms';
 import Lobby from './Lobby';
+import RoomMetadata from './RoomMetadata';
 import XmppConnection from './XmppConnection';
 import Moderator from './moderator';
 const logger = getLogger(__filename);
@@ -125,6 +126,7 @@ export default class ChatRoom extends Listenable {
         }
         this.avModeration = new AVModeration(this);
         this.breakoutRooms = new BreakoutRooms(this);
+        this.roomMetadata = new RoomMetadata(this);
         this.initPresenceMap(options);
         this.lastPresences = {};
         this.phoneNumber = null;
@@ -284,6 +286,16 @@ export default class ChatRoom extends Listenable {
             if (membersOnly !== this.membersOnlyEnabled) {
                 this.membersOnlyEnabled = membersOnly;
                 this.eventEmitter.emit(XMPPEvents.MUC_MEMBERS_ONLY_CHANGED, membersOnly);
+            }
+            const roomMetadataEl = $(result).find('>query>x[type="result"]>field[var="muc#roominfo_jitsimetadata"]>value');
+            const roomMetadataText = roomMetadataEl === null || roomMetadataEl === void 0 ? void 0 : roomMetadataEl.text();
+            if (roomMetadataText) {
+                try {
+                    this.roomMetadata._handleMessages(JSON.parse(roomMetadataText));
+                }
+                catch (e) {
+                    logger.warn('Failed to set room metadata', e);
+                }
             }
         }, error => {
             GlobalOnErrorHandler.callErrorHandler(error);
@@ -1402,6 +1414,12 @@ export default class ChatRoom extends Listenable {
         return this.breakoutRooms;
     }
     /**
+     * @returns {RoomMetadata}
+     */
+    getMetadataHandler() {
+        return this.roomMetadata;
+    }
+    /**
      * Returns the phone number for joining the conference.
      */
     getPhoneNumber() {
@@ -1502,6 +1520,7 @@ export default class ChatRoom extends Listenable {
         var _a;
         this.avModeration.dispose();
         this.breakoutRooms.dispose();
+        this.roomMetadata.dispose();
         const promises = [];
         ((_a = this.lobby) === null || _a === void 0 ? void 0 : _a.lobbyRoom) && promises.push(this.lobby.leave());
         promises.push(new Promise((resolve, reject) => {
