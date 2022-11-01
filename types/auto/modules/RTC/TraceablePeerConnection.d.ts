@@ -293,6 +293,12 @@ export default class TraceablePeerConnection {
     getConnectionState(): string;
     private getDesiredMediaDirection;
     /**
+     * Returns the MID of the m-line associated with the local desktop track (if it exists).
+     *
+     * @returns {Number|null}
+     */
+    _getDesktopTrackMid(): number | null;
+    /**
      * Returns the list of RTCRtpReceivers created for the source of the given media type associated with
      * the set of remote endpoints specified.
      * @param {Array<string>} endpoints list of the endpoints

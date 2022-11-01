@@ -563,14 +563,9 @@ export default class JingleSessionPC extends JingleSession {
      */
     setMediaTransferActive(audioActive: boolean, videoActive: boolean): Promise<any>;
     /**
-     * Will put and execute on the queue a session modify task. Currently it
-     * only checks the senders attribute of the video content in order to figure
-     * out if the remote peer has video in the inactive state (stored locally
-     * in {@link _remoteVideoActive} - see field description for more info).
-     * @param {jQuery} jingleContents jQuery selector pointing to the jingle
-     * element of the session modify IQ.
-     * @see {@link _remoteVideoActive}
-     * @see {@link _localVideoActive}
+     * Will put and execute on the queue a session modify task. It checks if the sourceMaxFrameHeight (as requested by
+     * the p2p peer) or the senders attribute of the video content has changed and modifies the local video sources
+     * accordingly.
      */
     modifyContents(jingleContents: any): void;
     /**
