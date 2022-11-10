@@ -206,6 +206,9 @@ const ScreenObtainer = {
         const audio = this._getAudioConstraints();
         // At the time of this writing 'min' constraint for fps is not supported by getDisplayMedia.
         video.frameRate && delete video.frameRate.min;
+        // #bloomberg #screenshare @wliang67 default screen share options tab to window.
+        video.displaySurface = 'window';
+        // #end
         if (Object.keys(video).length === 0) {
             video = true;
         }
