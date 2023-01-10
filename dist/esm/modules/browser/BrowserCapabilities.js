@@ -3,8 +3,12 @@ import { getLogger } from '@jitsi/logger';
 const logger = getLogger(__filename);
 /* Minimum required Chrome / Chromium version. This applies also to derivatives. */
 const MIN_REQUIRED_CHROME_VERSION = 72;
-const MIN_REQUIRED_SAFARI_VERSION = 14;
-const MIN_REQUIRED_IOS_VERSION = 14;
+// #bloomberg #deviceSupport @wliang67 update minimum safari and ios version.
+// const MIN_REQUIRED_SAFARI_VERSION = 14;
+// const MIN_REQUIRED_IOS_VERSION = 14;
+const MIN_REQUIRED_SAFARI_VERSION = 15;
+const MIN_REQUIRED_IOS_VERSION = 15;
+// #end
 // TODO: Move this code to js-utils.
 // NOTE: Now we are extending BrowserDetection in order to preserve
 // RTCBrowserType interface but maybe it worth exporting BrowserCapabilities
@@ -203,7 +207,10 @@ export default class BrowserCapabilities extends BrowserDetection {
      * https://bugs.webkit.org/show_bug.cgi?id=231071 and https://bugs.webkit.org/show_bug.cgi?id=231074 for details.
      */
     supportsVP9() {
-        return this.isChromiumBased() || this.isReactNative();
+        // #bloomberg #deviceSupport @wliang67 support vp9 for all browsers.
+        // return this.isChromiumBased() || this.isReactNative();
+        return true;
+        // #end
     }
     /**
      * Checks if the browser uses SDP munging for turning on simulcast.

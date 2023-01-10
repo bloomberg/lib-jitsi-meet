@@ -111,7 +111,7 @@ export default class BrowserCapabilities {
      * because of issues with rendering. Please check https://bugzilla.mozilla.org/show_bug.cgi?id=1492500,
      * https://bugs.webkit.org/show_bug.cgi?id=231071 and https://bugs.webkit.org/show_bug.cgi?id=231074 for details.
      */
-    supportsVP9(): any;
+    supportsVP9(): boolean;
     /**
      * Checks if the browser uses SDP munging for turning on simulcast.
      *
