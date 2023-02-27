@@ -236,7 +236,8 @@ export default class BrowserCapabilities extends BrowserDetection {
     supportsVP9() {
         // #bloomberg #deviceSupport @wliang67 support vp9 for all browsers.
         // return this.isChromiumBased() || this.isReactNative();
-        return true;
+        // https://bugzilla.mozilla.org/show_bug.cgi?id=1633876
+        return !this.isFirefox();
         // #end
     }
 
