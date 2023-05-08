@@ -200,8 +200,18 @@ const ScreenObtainer = {
         if (setScreenSharingResolutionConstraints && !((desktopSharingFrameRate === null || desktopSharingFrameRate === void 0 ? void 0 : desktopSharingFrameRate.max) > SS_DEFAULT_FRAME_RATE)) {
             // Set bogus resolution constraints to work around
             // https://bugs.chromium.org/p/chromium/issues/detail?id=1056311
-            video.height = 99999;
-            video.width = 99999;
+            // #bloomberg #screenshare @jabarca update "max" resolution to fix sharing tab in full screen mode.
+            // Happens when sharing Google Slides and going into slideshow. Seems like constraints are treated
+            // as max when capturing normally, but not when capturing fullscreened tab. Then the aspect ratio
+            // of the constraints is enforced, forcing vertical black bars on the sides (letterboxing). Setting
+            // constraints to 4x 4K resolution should be enough to cover all monitor sizes while preserving
+            // aspect ratio in presentations. Other multiples of 4K seem not to have the desired effect of
+            // avoiding letterboxing.
+            // video.height = 99999;
+            // video.width = 99999;
+            video.height = 8640;
+            video.width = 15360;
+            // #end
         }
         const audio = this._getAudioConstraints();
         // At the time of this writing 'min' constraint for fps is not supported by getDisplayMedia.
