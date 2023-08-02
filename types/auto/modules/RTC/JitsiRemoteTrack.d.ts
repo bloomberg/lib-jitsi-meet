@@ -21,7 +21,7 @@ export default class JitsiRemoteTrack extends JitsiTrack {
      * @throws {TypeError} if <tt>ssrc</tt> is not a number.
      * @constructor
      */
-    constructor(rtc: any, conference: any, ownerEndpointId: string, stream: MediaStream, track: MediaStreamTrack, mediaType: any, videoType: any, ssrc: number, muted: boolean, isP2P: boolean, sourceName: string);
+    constructor(rtc: any, conference: any, ownerEndpointId: string, stream: MediaStream, track: MediaStreamTrack, mediaType: any, videoType: VideoType, ssrc: number, muted: boolean, isP2P: boolean, sourceName: string);
     rtc: any;
     ssrc: number;
     ownerEndpointId: string;
@@ -171,3 +171,4 @@ export default class JitsiRemoteTrack extends JitsiTrack {
 }
 import JitsiTrack from "./JitsiTrack";
 import TrackStreamingStatusImpl from "../connectivity/TrackStreamingStatus";
+import { VideoType } from "../../service/RTC/VideoType";
