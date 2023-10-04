@@ -2315,7 +2315,12 @@ JitsiConference.prototype._acceptJvbIncomingCall = function(jingleSession, jingl
             this._signalingLayer,
             {
                 ...this.options.config,
-                enableInsertableStreams: this.isE2EEEnabled()
+                codecSettings: {
+                    mediaType: MediaType.VIDEO,
+                    preferred: this.codecSelection.jvbPreferredCodec,
+                    disabled: this.codecSelection.jvbDisabledCodec
+                },
+                enableInsertableStreams: this.isE2EEEnabled() || FeatureFlags.isRunInLiteModeEnabled()
             });
     } catch (error) {
         GlobalOnErrorHandler.callErrorHandler(error);
@@ -3074,7 +3079,12 @@ JitsiConference.prototype._acceptP2PIncomingCall = function(jingleSession, jingl
         this._signalingLayer,
         {
             ...this.options.config,
-            enableInsertableStreams: this.isE2EEEnabled()
+            codecSettings: {
+                mediaType: MediaType.VIDEO,
+                preferred: this.codecSelection.p2pPreferredCodec,
+                disabled: this.codecSelection.p2pDisabledCodec
+            },
+            enableInsertableStreams: this.isE2EEEnabled() || FeatureFlags.isRunInLiteModeEnabled()
         });
 
     logger.info('Starting CallStats for P2P connection...');
@@ -3445,7 +3455,12 @@ JitsiConference.prototype._startP2PSession = function(remoteJid) {
         this._signalingLayer,
         {
             ...this.options.config,
-            enableInsertableStreams: this.isE2EEEnabled()
+            codecSettings: {
+                mediaType: MediaType.VIDEO,
+                preferred: this.codecSelection.p2pPreferredCodec,
+                disabled: this.codecSelection.p2pDisabledCodec
+            },
+            enableInsertableStreams: this.isE2EEEnabled() || FeatureFlags.isRunInLiteModeEnabled()
         });
 
     logger.info('Starting CallStats for P2P connection...');

@@ -1913,7 +1913,11 @@ JitsiConference.prototype._acceptJvbIncomingCall = function (jingleSession, jing
         value: now
     }));
     try {
-        jingleSession.initialize(this.room, this.rtc, this._signalingLayer, Object.assign(Object.assign({}, this.options.config), { enableInsertableStreams: this.isE2EEEnabled() }));
+        jingleSession.initialize(this.room, this.rtc, this._signalingLayer, Object.assign(Object.assign({}, this.options.config), { codecSettings: {
+                mediaType: MediaType.VIDEO,
+                preferred: this.codecSelection.jvbPreferredCodec,
+                disabled: this.codecSelection.jvbDisabledCodec
+            }, enableInsertableStreams: this.isE2EEEnabled() || FeatureFlags.isRunInLiteModeEnabled() }));
     }
     catch (error) {
         GlobalOnErrorHandler.callErrorHandler(error);
@@ -2552,7 +2556,11 @@ JitsiConference.prototype._acceptP2PIncomingCall = function (jingleSession, jing
     // Accept the offer
     this.p2pJingleSession = jingleSession;
     this._sendConferenceJoinAnalyticsEvent();
-    this.p2pJingleSession.initialize(this.room, this.rtc, this._signalingLayer, Object.assign(Object.assign({}, this.options.config), { enableInsertableStreams: this.isE2EEEnabled() }));
+    this.p2pJingleSession.initialize(this.room, this.rtc, this._signalingLayer, Object.assign(Object.assign({}, this.options.config), { codecSettings: {
+            mediaType: MediaType.VIDEO,
+            preferred: this.codecSelection.p2pPreferredCodec,
+            disabled: this.codecSelection.p2pDisabledCodec
+        }, enableInsertableStreams: this.isE2EEEnabled() || FeatureFlags.isRunInLiteModeEnabled() }));
     logger.info('Starting CallStats for P2P connection...');
     let remoteID = Strophe.getResourceFromJid(this.p2pJingleSession.remoteJid);
     const participant = this.participants[remoteID];
@@ -2833,7 +2841,11 @@ JitsiConference.prototype._startP2PSession = function (remoteJid) {
         = this.xmpp.connection.jingle.newP2PJingleSession(this.room.myroomjid, remoteJid);
     logger.info('Created new P2P JingleSession', this.room.myroomjid, remoteJid);
     this._sendConferenceJoinAnalyticsEvent();
-    this.p2pJingleSession.initialize(this.room, this.rtc, this._signalingLayer, Object.assign(Object.assign({}, this.options.config), { enableInsertableStreams: this.isE2EEEnabled() }));
+    this.p2pJingleSession.initialize(this.room, this.rtc, this._signalingLayer, Object.assign(Object.assign({}, this.options.config), { codecSettings: {
+            mediaType: MediaType.VIDEO,
+            preferred: this.codecSelection.p2pPreferredCodec,
+            disabled: this.codecSelection.p2pDisabledCodec
+        }, enableInsertableStreams: this.isE2EEEnabled() || FeatureFlags.isRunInLiteModeEnabled() }));
     logger.info('Starting CallStats for P2P connection...');
     let remoteID = Strophe.getResourceFromJid(this.p2pJingleSession.remoteJid);
     const participant = this.participants[remoteID];

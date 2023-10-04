@@ -44,7 +44,6 @@ export class CodecSelection {
         }
         this.conference.on(JitsiConferenceEvents.USER_JOINED, () => this._selectPreferredCodec());
         this.conference.on(JitsiConferenceEvents.USER_LEFT, () => this._selectPreferredCodec());
-        this.conference.on(JitsiConferenceEvents._MEDIA_SESSION_STARTED, session => this._onMediaSessionStarted(session));
     }
     /**
      * Checks if a given string is a valid video codec mime type.
