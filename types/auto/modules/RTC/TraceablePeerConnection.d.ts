@@ -225,6 +225,10 @@ export default class TraceablePeerConnection {
     */
     _usesUnifiedPlan: boolean;
     /**
+     * Codec preferences set for the peerconnection through config.js.
+     */
+    codecSettings: any;
+    /**
      * Flag used to indicate if RTCRtpTransceiver#setCodecPreferences is to be used instead of SDP
      * munging for codec selection.
      */
@@ -558,30 +562,19 @@ export default class TraceablePeerConnection {
      * @param {CodecMimeType} disabledCodec the codec that needs to be disabled.
      * @returns {void}
      */
-    setVideoCodecs(preferredCodec?: {
+    setVideoCodecs(preferredCodec: {
         H264: string;
         OPUS: string;
         ULPFEC: string;
         VP8: string;
         VP9: string;
-    }, disabledCodec?: {
+    }, disabledCodec: {
         H264: string;
         OPUS: string;
         ULPFEC: string;
         VP8: string;
         VP9: string;
     }): void;
-    codecPreference: {
-        enable: boolean;
-        mediaType: MediaType;
-        mimeType: {
-            H264: string;
-            OPUS: string;
-            ULPFEC: string;
-            VP8: string;
-            VP9: string;
-        };
-    };
     /**
      * Tells if the given WebRTC <tt>MediaStream</tt> has been added to
      * the underlying WebRTC PeerConnection.
