@@ -1,8 +1,6 @@
-import EventEmitter from 'events';
-
 import * as JitsiConferenceEvents from '../../JitsiConferenceEvents';
 import * as JitsiTrackEvents from '../../JitsiTrackEvents';
-import browser from '../browser';
+import EventEmitter from '../util/EventEmitter';
 
 import * as DetectionEvents from './DetectionEvents';
 
@@ -32,9 +30,6 @@ export default class NoAudioSignalDetection extends EventEmitter {
         this._timeoutTrigger = null;
         this._hasAudioInput = null;
 
-        if (!browser.supportsReceiverStats()) {
-            conference.statistics.addAudioLevelListener(this._audioLevel.bind(this));
-        }
         conference.on(JitsiConferenceEvents.TRACK_ADDED, this._trackAdded.bind(this));
     }
 
@@ -132,21 +127,19 @@ export default class NoAudioSignalDetection extends EventEmitter {
             this._clearTriggerTimeout();
 
             // Listen for the audio levels on the newly added audio track
-            if (browser.supportsReceiverStats()) {
-                track.on(
-                    JitsiTrackEvents.NO_AUDIO_INPUT,
-                    audioLevel => {
-                        this._handleNoAudioInputDetection(audioLevel);
-                    }
-                );
-                track.on(
-                    JitsiTrackEvents.TRACK_AUDIO_LEVEL_CHANGED,
-                    audioLevel => {
-                        this._handleNoAudioInputDetection(audioLevel);
-                        this._handleAudioInputStateChange(audioLevel);
-                    }
-                );
-            }
+            track.on(
+                JitsiTrackEvents.NO_AUDIO_INPUT,
+                audioLevel => {
+                    this._handleNoAudioInputDetection(audioLevel);
+                }
+            );
+            track.on(
+                JitsiTrackEvents.TRACK_AUDIO_LEVEL_CHANGED,
+                audioLevel => {
+                    this._handleNoAudioInputDetection(audioLevel);
+                    this._handleAudioInputStateChange(audioLevel);
+                }
+            );
         }
     }
 }

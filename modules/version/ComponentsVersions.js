@@ -1,5 +1,3 @@
-import Statistics from '../statistics/statistics';
-
 const logger = require('@jitsi/logger').getLogger(__filename);
 
 /**
@@ -29,8 +27,6 @@ ComponentsVersions.prototype.processVersions
             return;
         }
 
-        const log = [];
-
         versions.children.forEach(component => {
 
             const name = component.attributes.name;
@@ -39,14 +35,9 @@ ComponentsVersions.prototype.processVersions
             if (this.versions[name] !== version) {
                 this.versions[name] = version;
                 logger.info(`Got ${name} version: ${version}`);
-
-                log.push({
-                    id: 'component_version',
-                    component: name,
-                    version
-                });
             }
         });
+<<<<<<< HEAD
 
         // logs versions to stats
         if (log.length > 0) {
@@ -55,6 +46,8 @@ ComponentsVersions.prototype.processVersions
             logger.info(JSON.stringify(log));
             // #end
         }
+=======
+>>>>>>> v1750.0.0+ca40744f
     };
 
 /**

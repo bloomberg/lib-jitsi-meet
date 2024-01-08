@@ -14,6 +14,8 @@ export default class JibriSession {
     constructor(options = {}) {
         this._connection = options.connection;
         this._mode = options.mode;
+        this._jibriJid = null;
+        this._statusFromJicofo = '';
 
         this._setSessionID(options.sessionID);
         this.setStatus(options.status);
@@ -61,7 +63,19 @@ export default class JibriSession {
      * @returns {string|undefined}
      */
     getStatus() {
-        return this._status;
+        // If _status is not set fallback to the status reported by jicofo.
+        if (this._status) {
+            return this._status;
+        }
+
+        return this._statusFromJicofo;
+    }
+
+    /**
+     * @returns {string|undefined} the JID of jibri associated with this session.
+     */
+    getJibriJid() {
+        return this._jibriJid;
     }
 
     /**
@@ -112,6 +126,25 @@ export default class JibriSession {
      */
     setStatus(status) {
         this._status = status;
+    }
+
+    /**
+     * Set the session status reported by jicofo. If a jibri is present in the room,
+     * the status is always 'on'. Otherwise, we fallback to the status reported by jicofo.
+     *
+     * @param {string} status
+     */
+    setStatusFromJicofo(status) {
+        this._statusFromJicofo = status;
+    }
+
+    /**
+     * Set the JID of the jibri associated with this session.
+     *
+     * @param {*} jibriJid
+     */
+    setJibriJid(jibriJid) {
+        this._jibriJid = jibriJid;
     }
 
     /**
@@ -202,8 +235,7 @@ export default class JibriSession {
     /**
      * Generates the message to change the status of the recording session.
      *
-     * @param {string} status - The new status to which the recording session
-     * should transition.
+     * @param {string} [options.action] - The action to set the IQ
      * @param {string} [options.appData] - Data specific to the app/service that
      * the result file will be uploaded.
      * @param {string} [options.broadcastId] - The broadcast ID of an

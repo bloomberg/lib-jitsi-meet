@@ -2,7 +2,7 @@
 
 const path = require('path');
 const process = require('process');
-const { ProvidePlugin } = require('webpack');
+const { IgnorePlugin, ProvidePlugin } = require('webpack');
 const { BundleAnalyzerPlugin } = require('webpack-bundle-analyzer');
 
 
@@ -28,7 +28,7 @@ module.exports = (minimize, analyzeBundle) => {
                         process.env.LIB_JITSI_MEET_COMMIT_HASH || 'development',
                     search: '{#COMMIT_HASH#}'
                 },
-                test: path.join(__dirname, 'JitsiMeetJS.js')
+                test: path.join(__dirname, 'JitsiMeetJS.ts')
             }, {
                 // Transpile ES2015 (aka ES6) to ES5.
 
@@ -75,10 +75,11 @@ module.exports = (minimize, analyzeBundle) => {
         },
         performance: {
             hints: minimize ? 'error' : false,
-            maxAssetSize: 825 * 1024,
-            maxEntrypointSize: 825 * 1024
+            maxAssetSize: 1.08 * 1024 * 1024,
+            maxEntrypointSize: 1.08 * 1024 * 1024
         },
         plugins: [
+            new IgnorePlugin({ resourceRegExp: /^(@xmldom\/xmldom|ws)$/ }),
             analyzeBundle
                 && new BundleAnalyzerPlugin({
                     analyzerMode: 'disabled',
