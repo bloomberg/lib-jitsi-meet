@@ -164,27 +164,6 @@ export default {
             this.analytics.dispose();
         }
 
-<<<<<<< HEAD:JitsiMeetJS.js
-        if (options.enableWindowOnErrorHandler) {
-            GlobalOnErrorHandler.addHandler(
-                this.getGlobalOnErrorHandler.bind(this));
-        }
-
-        if (this.version) {
-            const logObject = {
-                id: 'component_version',
-                component: 'lib-jitsi-meet',
-                version: this.version
-            };
-
-            Statistics.sendLog(JSON.stringify(logObject));
-            // #bloomberg #log @rpang27 log component_version
-            logger.info(JSON.stringify(logObject));
-            // #end
-        }
-
-=======
->>>>>>> v1750.0.0+ca40744f:JitsiMeetJS.ts
         return RTC.init(options);
     },
 

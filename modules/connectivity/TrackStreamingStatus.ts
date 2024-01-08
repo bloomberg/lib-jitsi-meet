@@ -300,13 +300,7 @@ export class TrackStreamingStatusImpl {
             this.rtc.removeListener(RTCEvents.REMOTE_TRACK_UNMUTE, this._onTrackRtcUnmuted);
 
             this.track.off(JitsiTrackEvents.TRACK_MUTE_CHANGED, this._onSignallingMuteChanged);
-<<<<<<< HEAD
-            // #bloomberg #trackStreamingStatus @wliang67 remove listener to prevent possible memory leak
             this.track.off(JitsiTrackEvents.TRACK_VIDEOTYPE_CHANGED, this._onTrackVideoTypeChanged);
-            // #end
-=======
-            this.track.off(JitsiTrackEvents.TRACK_VIDEOTYPE_CHANGED, this._onTrackVideoTypeChanged);
->>>>>>> v1750.0.0+ca40744f
         }
 
         this.conference.off(JitsiConferenceEvents.FORWARDED_SOURCES_CHANGED, this._onForwardedSourcesChanged);

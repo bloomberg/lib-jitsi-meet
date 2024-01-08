@@ -1126,12 +1126,7 @@ export default class XMPP extends Listenable {
             logObject.id = 'deployment_info';
             const entry = JSON.stringify(logObject);
 
-            Statistics.sendLog(entry);
-
-            // #bloomberg #log @rpang27 log deployment_info
             logger.info(entry);
-
-            // #end
         }
 
         this.sendDeploymentInfo = false;

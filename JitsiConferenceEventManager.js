@@ -553,43 +553,6 @@ JitsiConferenceEventManager.prototype.setupRTCListeners = function() {
             }
         });
 
-    rtc.addListener(RTCEvents.LOCAL_UFRAG_CHANGED,
-        (tpc, ufrag) => {
-            if (!tpc.isP2P) {
-                Statistics.sendLog(
-                    JSON.stringify({
-                        id: 'local_ufrag',
-                        value: ufrag
-                    }));
-
-                // #bloomberg #log @rpang27 log local_ufrag
-                logger.info(JSON.stringify({
-                    id: 'local_ufrag',
-                    value: ufrag
-                }));
-
-                // #end
-            }
-        });
-    rtc.addListener(RTCEvents.REMOTE_UFRAG_CHANGED,
-        (tpc, ufrag) => {
-            if (!tpc.isP2P) {
-                Statistics.sendLog(
-                    JSON.stringify({
-                        id: 'remote_ufrag',
-                        value: ufrag
-                    }));
-
-                // #bloomberg #log @rpang27 log remote_ufrag
-                logger.info(JSON.stringify({
-                    id: 'remote_ufrag',
-                    value: ufrag
-                }));
-
-                // #end
-            }
-        });
-
     rtc.addListener(RTCEvents.CREATE_ANSWER_FAILED,
         (e, tpc) => {
             if (!tpc.isP2P) {

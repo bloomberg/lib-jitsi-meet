@@ -37,17 +37,6 @@ ComponentsVersions.prototype.processVersions
                 logger.info(`Got ${name} version: ${version}`);
             }
         });
-<<<<<<< HEAD
-
-        // logs versions to stats
-        if (log.length > 0) {
-            Statistics.sendLog(JSON.stringify(log));
-            // #bloomberg #log @rpang27 log component_version
-            logger.info(JSON.stringify(log));
-            // #end
-        }
-=======
->>>>>>> v1750.0.0+ca40744f
     };
 
 /**
