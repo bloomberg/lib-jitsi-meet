@@ -38,37 +38,7 @@ const ScreenObtainer = {
      * @private
      */
     _createObtainStreamMethod() {
-        if (browser.isNWJS()) {
-            return (onSuccess, onFailure) => {
-                window.JitsiMeetNW.obtainDesktopStream(onSuccess, (error, constraints) => {
-                    let jitsiError;
-                    // FIXME:
-                    // This is very very dirty fix for recognising that the
-                    // user have clicked the cancel button from the Desktop
-                    // sharing pick window. The proper solution would be to
-                    // detect this in the NWJS application by checking the
-                    // streamId === "". Even better solution would be to
-                    // stop calling GUM from the NWJS app and just pass the
-                    // streamId to lib-jitsi-meet. This way the desktop
-                    // sharing implementation for NWJS and chrome extension
-                    // will be the same and lib-jitsi-meet will be able to
-                    // control the constraints, check the streamId, etc.
-                    //
-                    // I cannot find documentation about "InvalidStateError"
-                    // but this is what we are receiving from GUM when the
-                    // streamId for the desktop sharing is "".
-                    if (error && error.name === 'InvalidStateError') {
-                        jitsiError = new JitsiTrackError(JitsiTrackErrors.SCREENSHARING_USER_CANCELED);
-                    }
-                    else {
-                        jitsiError = new JitsiTrackError(error, constraints, ['desktop']);
-                    }
-                    (typeof onFailure === 'function')
-                        && onFailure(jitsiError);
-                });
-            };
-        }
-        else if (browser.isElectron()) {
+        if (browser.isElectron()) {
             return this.obtainScreenOnElectron;
         }
         else if (browser.isReactNative() && browser.supportsGetDisplayMedia()) {
@@ -112,11 +82,11 @@ const ScreenObtainer = {
      */
     obtainScreenOnElectron(onSuccess, onFailure, options = {}) {
         if (window.JitsiMeetScreenObtainer && window.JitsiMeetScreenObtainer.openDesktopPicker) {
-            const { desktopSharingFrameRate, desktopSharingSources } = this.options;
+            const { desktopSharingFrameRate, desktopSharingResolution, desktopSharingSources } = this.options;
             window.JitsiMeetScreenObtainer.openDesktopPicker({
                 desktopSharingSources: options.desktopSharingSources || desktopSharingSources || ['screen', 'window']
             }, (streamId, streamType, screenShareAudio = false) => {
-                var _a, _b;
+                var _a, _b, _c, _d, _e, _f, _g, _h;
                 if (streamId) {
                     let audioConstraints = false;
                     if (screenShareAudio) {
@@ -147,18 +117,24 @@ const ScreenObtainer = {
                                 chromeMediaSourceId: streamId,
                                 minFrameRate: (_a = desktopSharingFrameRate === null || desktopSharingFrameRate === void 0 ? void 0 : desktopSharingFrameRate.min) !== null && _a !== void 0 ? _a : SS_DEFAULT_FRAME_RATE,
                                 maxFrameRate: (_b = desktopSharingFrameRate === null || desktopSharingFrameRate === void 0 ? void 0 : desktopSharingFrameRate.max) !== null && _b !== void 0 ? _b : SS_DEFAULT_FRAME_RATE,
-                                maxWidth: window.screen.width,
-                                maxHeight: window.screen.height
+                                minWidth: (_c = desktopSharingResolution === null || desktopSharingResolution === void 0 ? void 0 : desktopSharingResolution.width) === null || _c === void 0 ? void 0 : _c.min,
+                                minHeight: (_d = desktopSharingResolution === null || desktopSharingResolution === void 0 ? void 0 : desktopSharingResolution.height) === null || _d === void 0 ? void 0 : _d.min,
+                                maxWidth: (_f = (_e = desktopSharingResolution === null || desktopSharingResolution === void 0 ? void 0 : desktopSharingResolution.width) === null || _e === void 0 ? void 0 : _e.max) !== null && _f !== void 0 ? _f : window.screen.width,
+                                maxHeight: (_h = (_g = desktopSharingResolution === null || desktopSharingResolution === void 0 ? void 0 : desktopSharingResolution.height) === null || _g === void 0 ? void 0 : _g.max) !== null && _h !== void 0 ? _h : window.screen.height
                             }
                         }
                     };
                     // We have to use the old API on Electron to get a desktop stream.
                     navigator.mediaDevices.getUserMedia(constraints)
-                        .then(stream => onSuccess({
-                        stream,
-                        sourceId: streamId,
-                        sourceType: streamType
-                    }), onFailure);
+                        .then(stream => {
+                        this.setContentHint(stream);
+                        onSuccess({
+                            stream,
+                            sourceId: streamId,
+                            sourceType: streamType
+                        });
+                    })
+                        .catch(err => onFailure(err));
                 }
                 else {
                     // As noted in Chrome Desktop Capture API:
@@ -179,7 +155,6 @@ const ScreenObtainer = {
      * @param errorCallback - The error callback.
      */
     obtainScreenFromGetDisplayMedia(callback, errorCallback) {
-        var _a, _b;
         let getDisplayMedia;
         if (navigator.getDisplayMedia) {
             getDisplayMedia = navigator.getDisplayMedia.bind(navigator);
@@ -188,45 +163,86 @@ const ScreenObtainer = {
             // eslint-disable-next-line max-len
             getDisplayMedia = navigator.mediaDevices.getDisplayMedia.bind(navigator.mediaDevices);
         }
-        const { desktopSharingFrameRate } = this.options;
-        const setScreenSharingResolutionConstraints = browser.isChromiumBased()
-            && ((_b = (_a = this.options) === null || _a === void 0 ? void 0 : _a.testing) === null || _b === void 0 ? void 0 : _b.setScreenSharingResolutionConstraints);
+        const audio = this._getAudioConstraints();
         let video = {};
+        const constraintOpts = {};
+        const { desktopSharingFrameRate, screenShareSettings } = this.options;
         if (typeof desktopSharingFrameRate === 'object') {
             video.frameRate = desktopSharingFrameRate;
         }
-        // Capturing the screenshare at very high resolutions restricts the framerate. Therefore, skip this hack when
-        // the capture framerate is > 5 fps.
-        if (setScreenSharingResolutionConstraints && !((desktopSharingFrameRate === null || desktopSharingFrameRate === void 0 ? void 0 : desktopSharingFrameRate.max) > SS_DEFAULT_FRAME_RATE)) {
+        // At the time of this writing 'min' constraint for fps is not supported by getDisplayMedia on any of the
+        // browsers. getDisplayMedia will fail with an error "invalid constraints" in this case.
+        video.frameRate && delete video.frameRate.min;
+        if (browser.isChromiumBased()) {
+            // Show users the current tab is the preferred capture source, default: false.
+            browser.isEngineVersionGreaterThan(93)
+                && (constraintOpts.preferCurrentTab = (screenShareSettings === null || screenShareSettings === void 0 ? void 0 : screenShareSettings.desktopPreferCurrentTab) || false);
+            // Allow users to select system audio, default: include.
+            browser.isEngineVersionGreaterThan(104)
+                && (constraintOpts.systemAudio = (screenShareSettings === null || screenShareSettings === void 0 ? void 0 : screenShareSettings.desktopSystemAudio) || 'include');
+            // Allow users to seamlessly switch which tab they are sharing without having to select the tab again.
+            browser.isEngineVersionGreaterThan(106)
+                && (constraintOpts.surfaceSwitching = (screenShareSettings === null || screenShareSettings === void 0 ? void 0 : screenShareSettings.desktopSurfaceSwitching) || 'include');
+            // Allow a user to be shown a preference for what screen is to be captured, default: unset.
+            browser.isEngineVersionGreaterThan(106) && (screenShareSettings === null || screenShareSettings === void 0 ? void 0 : screenShareSettings.desktopDisplaySurface)
+                && (video.displaySurface = screenShareSettings === null || screenShareSettings === void 0 ? void 0 : screenShareSettings.desktopDisplaySurface);
+            // Allow users to select the current tab as a capture source, default: exclude.
+            browser.isEngineVersionGreaterThan(111)
+                && (constraintOpts.selfBrowserSurface = (screenShareSettings === null || screenShareSettings === void 0 ? void 0 : screenShareSettings.desktopSelfBrowserSurface) || 'exclude');
             // Set bogus resolution constraints to work around
             // https://bugs.chromium.org/p/chromium/issues/detail?id=1056311
-            // #bloomberg #screenshare @jabarca update "max" resolution to fix sharing tab in full screen mode.
-            // Happens when sharing Google Slides and going into slideshow. Seems like constraints are treated
-            // as max when capturing normally, but not when capturing fullscreened tab. Then the aspect ratio
-            // of the constraints is enforced, forcing vertical black bars on the sides (letterboxing). Setting
-            // constraints to 4x 4K resolution should be enough to cover all monitor sizes while preserving
-            // aspect ratio in presentations. Other multiples of 4K seem not to have the desired effect of
-            // avoiding letterboxing.
-            // video.height = 99999;
-            // video.width = 99999;
-            video.height = 8640;
-            video.width = 15360;
             // #end
+            // https://bugs.chromium.org/p/chromium/issues/detail?id=1056311 for low fps screenshare. Capturing SS at
+            // very high resolutions restricts the framerate. Therefore, skip this hack when capture fps > 5 fps.
+            if (!((desktopSharingFrameRate === null || desktopSharingFrameRate === void 0 ? void 0 : desktopSharingFrameRate.max) > SS_DEFAULT_FRAME_RATE)) {
+                // #bloomberg #screenshare @jabarca update "max" resolution to fix sharing tab in full screen mode.
+                // Happens when sharing Google Slides and going into slideshow. Seems like constraints are treated
+                // as max when capturing normally, but not when capturing fullscreened tab. Then the aspect ratio
+                // of the constraints is enforced, forcing vertical black bars on the sides (letterboxing). Setting
+                // constraints to 4x 4K resolution should be enough to cover all monitor sizes while preserving
+                // aspect ratio in presentations. Other multiples of 4K seem not to have the desired effect of
+                // avoiding letterboxing.
+                // video.height = 99999;
+                // video.width = 99999;
+                video.height = 8640;
+                video.width = 15360;
+                // #end
+            }
         }
-        const audio = this._getAudioConstraints();
-        // At the time of this writing 'min' constraint for fps is not supported by getDisplayMedia.
-        video.frameRate && delete video.frameRate.min;
+        // Allow a user to be shown a preference for what screen is to be captured.
+        if (browser.isSafari() && (screenShareSettings === null || screenShareSettings === void 0 ? void 0 : screenShareSettings.desktopDisplaySurface)) {
+            video.displaySurface = screenShareSettings === null || screenShareSettings === void 0 ? void 0 : screenShareSettings.desktopDisplaySurface;
+        }
         if (Object.keys(video).length === 0) {
             video = true;
         }
-        const constraints = {
-            video,
-            audio,
-            cursor: 'always'
-        };
+        const constraints = Object.assign(Object.assign({ video,
+            audio }, constraintOpts), { cursor: 'always' });
         logger.info('Using getDisplayMedia for screen sharing', constraints);
         getDisplayMedia(constraints)
             .then(stream => {
+            this.setContentHint(stream);
+            // Apply min fps constraints to the track so that 0Hz mode doesn't kick in.
+            // https://bugs.chromium.org/p/webrtc/issues/detail?id=15539
+            if (browser.isChromiumBased()) {
+                const track = stream.getVideoTracks()[0];
+                let minFps = SS_DEFAULT_FRAME_RATE;
+                if (typeof (desktopSharingFrameRate === null || desktopSharingFrameRate === void 0 ? void 0 : desktopSharingFrameRate.min) === 'number' && desktopSharingFrameRate.min > 0) {
+                    minFps = desktopSharingFrameRate.min;
+                }
+                const contraints = {
+                    frameRate: {
+                        min: minFps
+                    }
+                };
+                try {
+                    track.applyConstraints(contraints);
+                }
+                catch (err) {
+                    logger.warn(`Min fps=${minFps} constraint could not be applied on the desktop track,`
+                        + `${err.message}`);
+                }
+            }
             callback({
                 stream,
                 sourceId: stream.id
@@ -238,7 +254,7 @@ const ScreenObtainer = {
                 errorMsg: error && error.message,
                 errorStack: error && error.stack
             };
-            logger.error('getDisplayMedia error', constraints, errorDetails);
+            logger.error('getDisplayMedia error', JSON.stringify(constraints), JSON.stringify(errorDetails));
             if (errorDetails.errorMsg && errorDetails.errorMsg.indexOf('denied by system') !== -1) {
                 // On Chrome this is the only thing different between error returned when user cancels
                 // and when no permission was given on the OS level.
@@ -258,6 +274,7 @@ const ScreenObtainer = {
         logger.info('Using getDisplayMedia for screen sharing');
         navigator.mediaDevices.getDisplayMedia({ video: true })
             .then(stream => {
+            this.setContentHint(stream);
             callback({
                 stream,
                 sourceId: stream.id
@@ -267,6 +284,23 @@ const ScreenObtainer = {
             errorCallback(new JitsiTrackError(JitsiTrackErrors
                 .SCREENSHARING_USER_CANCELED));
         });
+    },
+    /** Sets the contentHint on the transmitted MediaStreamTrack to indicate charaterstics in the video stream, which
+     * informs RTCPeerConnection on how to encode the track (to prefer motion or individual frame detail).
+     *
+     * @param {MediaStream} stream - The captured desktop stream.
+     * @returns {void}
+     */
+    setContentHint(stream) {
+        const { desktopSharingFrameRate } = this.options;
+        const desktopTrack = stream.getVideoTracks()[0];
+        // Set contentHint on the desktop track based on the fps requested.
+        if ('contentHint' in desktopTrack) {
+            desktopTrack.contentHint = (desktopSharingFrameRate === null || desktopSharingFrameRate === void 0 ? void 0 : desktopSharingFrameRate.max) > SS_DEFAULT_FRAME_RATE ? 'motion' : 'detail';
+        }
+        else {
+            logger.warn('MediaStreamTrack contentHint attribute not supported');
+        }
     },
     /**
      * Sets the max frame rate to be used for a desktop track capture.

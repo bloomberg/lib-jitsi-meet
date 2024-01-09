@@ -55,7 +55,7 @@ export class TrackStreamingStatusImpl {
      *
      * @constructor
      * @param rtc - the RTC service instance
-     * @param conference - parent conference instance
+     * @param conference - parent conference instance // TODO: Needs JitsiConference Type
      * @param {Object} options
      * @param {number} [options.p2pRtcMuteTimeout=2500] custom value for
      * {@link TrackStreamingStatusImpl.p2pRtcMuteTimeout}.
@@ -183,9 +183,7 @@ export class TrackStreamingStatusImpl {
             this.rtc.removeListener(RTCEvents.REMOTE_TRACK_MUTE, this._onTrackRtcMuted);
             this.rtc.removeListener(RTCEvents.REMOTE_TRACK_UNMUTE, this._onTrackRtcUnmuted);
             this.track.off(JitsiTrackEvents.TRACK_MUTE_CHANGED, this._onSignallingMuteChanged);
-            // #bloomberg #trackStreamingStatus @wliang67 remove listener to prevent possible memory leak
             this.track.off(JitsiTrackEvents.TRACK_VIDEOTYPE_CHANGED, this._onTrackVideoTypeChanged);
-            // #end
         }
         this.conference.off(JitsiConferenceEvents.FORWARDED_SOURCES_CHANGED, this._onForwardedSourcesChanged);
         this.conference.off(JitsiConferenceEvents.P2P_STATUS, this._onP2PStatus);
@@ -205,12 +203,6 @@ export class TrackStreamingStatusImpl {
             const sourceName = this.track.getSourceName();
             this.track._setTrackStreamingStatus(newStatus);
             logger.debug(`Emit track streaming status(${Date.now()}) ${sourceName}: ${newStatus}`);
-            // Log the event on CallStats
-            Statistics.sendLog(JSON.stringify({
-                id: 'track.streaming.status',
-                track: sourceName,
-                status: newStatus
-            }));
             // It's common for the event listeners to access the JitsiRemoteTrack. Thus pass it as a parameter here.
             this.track.emit(JitsiTrackEvents.TRACK_STREAMING_STATUS_CHANGED, this.track, newStatus);
         }
@@ -396,7 +388,7 @@ export class TrackStreamingStatusImpl {
             // The timeout is reduced when track is not in the forwarded sources
             const timeout = this._getVideoFrozenTimeout();
             this.trackTimer = window.setTimeout(() => {
-                logger.debug(`Set RTC mute timeout for: ${sourceName} of ${timeout} ms`);
+                logger.debug(`Set track RTC muted for: ${sourceName} after the timeout of ${timeout} ms`);
                 this.clearTimeout();
                 this.figureOutStreamingStatus();
             }, timeout);
@@ -428,7 +420,6 @@ export class TrackStreamingStatusImpl {
             return;
         }
         const sourceName = this.track.getSourceName();
-        logger.debug(`Detector on track signalling mute changed: ${sourceName}`, track.isMuted());
         this.figureOutStreamingStatus();
     }
     /**

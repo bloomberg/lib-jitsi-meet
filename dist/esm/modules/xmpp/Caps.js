@@ -1,7 +1,8 @@
 import $ from 'jquery';
-import { Strophe, b64_sha1 } from 'strophe.js'; // eslint-disable-line camelcase
+import { Strophe } from 'strophe.js'; // eslint-disable-line camelcase
 import { XMPPEvents } from '../../service/xmpp/XMPPEvents';
 import Listenable from '../util/Listenable';
+import sha1 from './sha1';
 /**
  * The property
  */
@@ -30,7 +31,7 @@ function generateSha(identities, features) {
         + (idx === 0 ? '' : '/')
         + (identity[key] ? identity[key] : ''), '')}<`, '');
     const sortedFeatures = features.sort().reduce((tmp, feature) => `${tmp + feature}<`, '');
-    return b64_sha1(sortedIdentities + sortedFeatures);
+    return sha1.b64_sha1(sortedIdentities + sortedFeatures);
 }
 /**
  * Parses the disco-info node and returns the sets of features and identities.
@@ -155,7 +156,7 @@ export default class Caps extends Listenable {
      * Returns a set with the features for a host.
      * @param {String} jid the jid of the host
      * @param {int} timeout the timeout in ms for reply from the host.
-     * @returns {Promise<Set<String>, Error>}
+     * @returns {Promise<Set<String>>}
      */
     getFeaturesAndIdentities(jid, node, timeout = 5000) {
         return this._getDiscoInfo(jid, node, timeout);

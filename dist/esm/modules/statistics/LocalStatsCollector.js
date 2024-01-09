@@ -125,7 +125,7 @@ LocalStatsCollector.prototype.stop = function () {
  * @returns {boolean}
  */
 LocalStatsCollector.isLocalStatsSupported = function () {
-    return Boolean(window.AudioContext);
+    return Boolean(window === null || window === void 0 ? void 0 : window.AudioContext);
 };
 /**
  * Disconnects the audio context.
