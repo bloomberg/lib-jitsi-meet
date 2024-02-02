@@ -268,11 +268,18 @@ JitsiConferenceEventManager.prototype.setupChatRoomListeners = function() {
                 const resource = Strophe.getResourceFromJid(jid);
                 const participant = conference.getParticipantById(resource) || resource;
 
-                if (session.getStatus() === 'off') {
+                // #bloomberg @lzhong57 utilizing getStatusFromJicofo to determine session status
+                // if (session.getStatus() === 'off') {
+                //     session.setTerminator(participant);
+                // } else if (session.getStatus() === 'on') {
+                //     session.setInitiator(participant);
+                // }
+                if (session.getStatusFromJicofo() === 'off') {
                     session.setTerminator(participant);
-                } else if (session.getStatus() === 'on') {
+                } else if (session.getStatusFromJicofo() === 'on') {
                     session.setInitiator(participant);
                 }
+                // #end
             }
 
             conference.eventEmitter.emit(

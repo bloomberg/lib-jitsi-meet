@@ -97,10 +97,7 @@ class RecordingManager {
             const prevStatus = session.getStatus();
 
             // Setting to ''
-            // #bloomberg @lzhang1211 setting session status to off
-            // session.setStatus('');
-            session.setStatus('off');
-            // # end
+            session.setStatus('');
 
             session.setJibriJid(null);
 

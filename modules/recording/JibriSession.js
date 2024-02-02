@@ -71,6 +71,17 @@ export default class JibriSession {
         return this._statusFromJicofo;
     }
 
+    // #bloomberg @lzhong57 return Jicofo status
+    /**
+     * Returns the current status of the session.
+     *
+     * @returns {string|undefined}
+     */
+    getStatusFromJicofo() {
+        return this._statusFromJicofo;
+    }
+    // #end
+
     /**
      * @returns {string|undefined} the JID of jibri associated with this session.
      */
