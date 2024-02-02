@@ -908,8 +908,7 @@ JitsiConference.prototype.addTrack = function (track) {
         }
         // Currently, only adding multiple video streams of different video types is supported.
         // TODO - remove this limitation once issues with jitsi-meet trying to add multiple camera streams is fixed.
-        if (FeatureFlags.isMultiStreamSendSupportEnabled()
-            && mediaType === MediaType.VIDEO
+        if (mediaType === MediaType.VIDEO
             && !localTracks.find(t => t.getVideoType() === track.getVideoType())) {
             const sourceName = getSourceNameForJitsiTrack(this.myUserId(), mediaType, (_a = this.getLocalTracks(mediaType)) === null || _a === void 0 ? void 0 : _a.length);
             track.setSourceName(sourceName);
@@ -933,7 +932,7 @@ JitsiConference.prototype.addTrack = function (track) {
         // Presence needs to be sent here for desktop track since we need the presence to reach the remote peer
         // before signaling so that a fake participant tile is created for screenshare. Otherwise, presence will
         // only be sent after a session-accept or source-add is ack'ed.
-        if (track.getVideoType() === VideoType.DESKTOP && FeatureFlags.isMultiStreamSendSupportEnabled()) {
+        if (track.getVideoType() === VideoType.DESKTOP) {
             this._updateRoomPresence(this.getActiveMediaSession());
         }
     });
@@ -1013,6 +1012,8 @@ JitsiConference.prototype._getInitialLocalTracks = function () {
         else if (trackType === MediaType.VIDEO && !this.isStartVideoMuted() && !this.startMutedPolicy.video) {
             return true;
         }
+        // Remove the track from the conference.
+        this.onLocalTrackRemoved(track);
         return false;
     });
 };
@@ -1052,7 +1053,7 @@ JitsiConference.prototype.replaceTrack = function (oldTrack, newTrack) {
     const oldVideoType = oldTrack === null || oldTrack === void 0 ? void 0 : oldTrack.getVideoType();
     const mediaType = (oldTrack === null || oldTrack === void 0 ? void 0 : oldTrack.getType()) || (newTrack === null || newTrack === void 0 ? void 0 : newTrack.getType());
     const newVideoType = newTrack === null || newTrack === void 0 ? void 0 : newTrack.getVideoType();
-    if (FeatureFlags.isMultiStreamSendSupportEnabled() && oldTrack && newTrack && oldVideoType !== newVideoType) {
+    if (oldTrack && newTrack && oldVideoType !== newVideoType) {
         throw new Error(`Replacing a track of videoType=${oldVideoType} with a track of videoType=${newVideoType} is`
             + ' not supported in this mode.');
     }
@@ -1203,17 +1204,24 @@ JitsiConference.prototype._setTrackMuteStatus = function (mediaType, localTrack,
  */
 JitsiConference.prototype._addLocalTrackToPc = function (track) {
     const addPromises = [];
-    if (this.jvbJingleSession) {
-        addPromises.push(this.jvbJingleSession.addTrackToPc(track));
+    if (track.conference === this) {
+        if (this.jvbJingleSession) {
+            addPromises.push(this.jvbJingleSession.addTrackToPc(track));
+        }
+        else {
+            logger.debug('Add local MediaStream - no JVB Jingle session started yet');
+        }
+        if (this.p2pJingleSession) {
+            addPromises.push(this.p2pJingleSession.addTrackToPc(track));
+        }
+        else {
+            logger.debug('Add local MediaStream - no P2P Jingle session started yet');
+        }
     }
     else {
-        logger.debug('Add local MediaStream - no JVB Jingle session started yet');
-    }
-    if (this.p2pJingleSession) {
-        addPromises.push(this.p2pJingleSession.addTrackToPc(track));
-    }
-    else {
-        logger.debug('Add local MediaStream - no P2P Jingle session started yet');
+        // If the track hasn't been added to the conference yet because of start muted by focus, add it to the
+        // conference instead of adding it only to the media sessions.
+        addPromises.push(this.addTrack(track));
     }
     return Promise.allSettled(addPromises);
 };
@@ -1226,17 +1234,19 @@ JitsiConference.prototype._addLocalTrackToPc = function (track) {
  */
 JitsiConference.prototype._removeLocalTrackFromPc = function (track) {
     const removePromises = [];
-    if (this.jvbJingleSession) {
-        removePromises.push(this.jvbJingleSession.removeTrackFromPc(track));
-    }
-    else {
-        logger.debug('Remove local MediaStream - no JVB JingleSession started yet');
-    }
-    if (this.p2pJingleSession) {
-        removePromises.push(this.p2pJingleSession.removeTrackFromPc(track));
-    }
-    else {
-        logger.debug('Remove local MediaStream - no P2P JingleSession started yet');
+    if (track.conference === this) {
+        if (this.jvbJingleSession) {
+            removePromises.push(this.jvbJingleSession.removeTrackFromPc(track));
+        }
+        else {
+            logger.debug('Remove local MediaStream - no JVB JingleSession started yet');
+        }
+        if (this.p2pJingleSession) {
+            removePromises.push(this.p2pJingleSession.removeTrackFromPc(track));
+        }
+        else {
+            logger.debug('Remove local MediaStream - no P2P JingleSession started yet');
+        }
     }
     return Promise.allSettled(removePromises);
 };
@@ -1728,11 +1738,10 @@ JitsiConference.prototype.onRemoteTrackRemoved = function (removedTrack) {
  */
 JitsiConference.prototype._onIncomingCallP2P = function (jingleSession, jingleOffer) {
     let rejectReason;
-    const usesUnifiedPlan = browser.supportsUnifiedPlan();
     const contentName = jingleOffer.find('>content').attr('name');
     const peerUsesUnifiedPlan = contentName === '0' || contentName === '1';
     // Reject P2P between endpoints that are not running in the same mode w.r.t to SDPs (plan-b and unified plan).
-    if (usesUnifiedPlan !== peerUsesUnifiedPlan) {
+    if (!peerUsesUnifiedPlan) {
         rejectReason = {
             reason: 'decline',
             reasonDescription: 'P2P disabled',
@@ -1841,7 +1850,7 @@ JitsiConference.prototype._acceptJvbIncomingCall = function (jingleSession, jing
         }, error => {
             logger.error('Failed to accept incoming Jingle session', error);
         }, localTracks);
-        // Enable or disable simulcast for plan-b screensharing based on the capture fps if it is set through the UI.
+        // Set the capture fps for screenshare if it is set through the UI.
         this._desktopSharingFrameRate
             && jingleSession.peerconnection.setDesktopSharingFrameRate(this._desktopSharingFrameRate);
         this.statistics.startRemoteStats(this.jvbJingleSession.peerconnection);
@@ -2555,8 +2564,7 @@ JitsiConference.prototype._updateProperties = function (properties = {}) {
         });
         const oldValue = this._hasVisitors;
         this._hasVisitors = this.properties['visitor-count'] > 0;
-        // as this is visitor leaving, consider it leaving for _maybeStartOrStopP2P
-        oldValue && !this._hasVisitors && this._maybeStartOrStopP2P(true);
+        oldValue !== this._hasVisitors && this._maybeStartOrStopP2P(true);
     }
 };
 /**
@@ -2685,7 +2693,7 @@ JitsiConference.prototype._startP2PSession = function (remoteJid) {
             disabled: this.codecSelection.p2pDisabledCodec,
             codecList: this.codecSelection.getCodecPreferenceList('p2p')
         }, enableInsertableStreams: this.isE2EEEnabled() || FeatureFlags.isRunInLiteModeEnabled() }));
-    const localTracks = this.getLocalTracks();
+    const localTracks = this._getInitialLocalTracks();
     this.p2pJingleSession.invite(localTracks);
 };
 /**
@@ -2713,8 +2721,7 @@ JitsiConference.prototype._maybeStartOrStopP2P = function (userLeftEvent) {
     if (!this.isP2PEnabled()
         || this.isP2PTestModeEnabled()
         || (browser.isFirefox() && !this._firefoxP2pEnabled)
-        || this.isE2EEEnabled()
-        || this._hasVisitors) {
+        || this.isE2EEEnabled()) {
         logger.info('Auto P2P disabled');
         return;
     }
@@ -2773,7 +2780,7 @@ JitsiConference.prototype._shouldBeInP2PMode = function () {
     const peers = this.getParticipants();
     const peerCount = peers.length;
     const hasBotPeer = peers.find(p => p.getBotType() === 'poltergeist' || p.hasFeature(FEATURE_JIGASI)) !== undefined;
-    const shouldBeInP2P = peerCount === 1 && !hasBotPeer;
+    const shouldBeInP2P = peerCount === 1 && !hasBotPeer && !this._hasVisitors;
     logger.debug(`P2P? peerCount: ${peerCount}, hasBotPeer: ${hasBotPeer} => ${shouldBeInP2P}`);
     return shouldBeInP2P;
 };
@@ -2911,7 +2918,7 @@ JitsiConference.prototype.setDesktopSharingFrameRate = function (maxFps) {
         return false;
     }
     this._desktopSharingFrameRate = maxFps;
-    // Enable or disable simulcast for plan-b screensharing based on the capture fps.
+    // Set capture fps for screenshare.
     this.jvbJingleSession && this.jvbJingleSession.peerconnection.setDesktopSharingFrameRate(maxFps);
     // Set the capture rate for desktop sharing.
     this.rtc.setDesktopSharingFrameRate(maxFps);
