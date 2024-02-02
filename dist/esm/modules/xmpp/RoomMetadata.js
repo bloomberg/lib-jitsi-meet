@@ -28,7 +28,7 @@ export default class RoomMetadata {
     /**
      * Sets metadata for the given key.
      *
-     * @param {string} key - key under which the  metadata will be stored.
+     * @param {string} key - key under which the metadata will be stored.
      * @param {object} data - data to be stored.
      */
     setMetadata(key, data) {

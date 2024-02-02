@@ -1,8 +1,8 @@
+import { safeJsonParse } from '@jitsi/js-utils/json';
 import { getLogger } from '@jitsi/logger';
 import $ from 'jquery';
 import { $build } from 'strophe.js';
 import { MediaType } from '../../service/RTC/MediaType';
-import FeatureFlags from '../flags/FeatureFlags';
 const logger = getLogger(__filename);
 /**
  * Creates a "source" XML element for the source described in compact JSON format in [sourceCompactJson].
@@ -14,7 +14,7 @@ function _createSourceExtension(owner, sourceCompactJson) {
     const node = $build('source', {
         xmlns: 'urn:xmpp:jingle:apps:rtp:ssma:0',
         ssrc: sourceCompactJson.s,
-        name: FeatureFlags.isSourceNameSignalingEnabled() ? sourceCompactJson.n : undefined
+        name: sourceCompactJson.n
     });
     if (sourceCompactJson.m) {
         node.c('parameter', {
@@ -111,7 +111,7 @@ export function expandSourcesFromJson(iq, jsonMessageXml) {
     var _a, _b;
     let json;
     try {
-        json = JSON.parse(jsonMessageXml.textContent);
+        json = safeJsonParse(jsonMessageXml.textContent);
     }
     catch (error) {
         logger.error(`json-message XML contained invalid JSON, ignoring: ${jsonMessageXml.textContent}`);

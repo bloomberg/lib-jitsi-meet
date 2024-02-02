@@ -22,13 +22,6 @@ export default class CustomSignalingLayer extends SignalingLayer {
         this.chatRoom = null;
     }
     /**
-     * Sets the <tt>ChatRoom</tt> instance used.
-     * @param {ChatRoom} room
-     */
-    setChatRoom(room) {
-        this.chatRoom = room;
-    }
-    /**
      * @inheritDoc
      */
     getPeerMediaInfo(owner, mediaType, sourceName) {
@@ -45,6 +38,30 @@ export default class CustomSignalingLayer extends SignalingLayer {
      */
     getSSRCOwner(ssrc) {
         return this.ssrcOwners.get(ssrc);
+    }
+    /**
+     * @inheritDoc
+     */
+    getTrackSourceName(ssrc) {
+        return undefined;
+    }
+    /**
+     * @inheritDoc
+     */
+    removeSSRCOwners(ssrcList) {
+        if (!(ssrcList === null || ssrcList === void 0 ? void 0 : ssrcList.length)) {
+            return;
+        }
+        for (const ssrc of ssrcList) {
+            this.ssrcOwners.delete(ssrc);
+        }
+    }
+    /**
+     * Sets the <tt>ChatRoom</tt> instance used.
+     * @param {ChatRoom} room
+     */
+    setChatRoom(room) {
+        this.chatRoom = room;
     }
     /**
      * @inheritDoc
@@ -76,13 +93,14 @@ export default class CustomSignalingLayer extends SignalingLayer {
     /**
      * @inheritDoc
      */
-    getTrackSourceName(ssrc) {
-        return undefined;
-    }
-    /**
-     * @inheritDoc
-     */
-    setTrackSourceName(ssrc, sourceName) {
+    updateSsrcOwnersOnLeave(id) {
+        const ssrcs = Array.from(this.ssrcOwners)
+            .filter(entry => entry[1] === id)
+            .map(entry => entry[0]);
+        if (!(ssrcs === null || ssrcs === void 0 ? void 0 : ssrcs.length)) {
+            return;
+        }
+        this.removeSSRCOwners(ssrcs);
     }
 }
 //# sourceMappingURL=CustomSignalingLayer.js.map

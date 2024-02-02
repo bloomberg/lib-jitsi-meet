@@ -55,6 +55,10 @@ export var XMPPEvents;
     // has changed.
     XMPPEvents["DISPLAY_NAME_CHANGED"] = "xmpp.display_name_changed";
     /**
+     * Event for incoming presence error which is for required display name.
+     */
+    XMPPEvents["DISPLAY_NAME_REQUIRED"] = "xmpp.display_name_required";
+    /**
      * Chat room instance have been added to Strophe.emuc plugin.
      */
     XMPPEvents["EMUC_ROOM_ADDED"] = "xmpp.emuc_room_added";
@@ -303,6 +307,14 @@ export var XMPPEvents;
      * @param {options} event - {address, oldState, newState, displayName}.
      */
     XMPPEvents["VIDEO_SIP_GW_SESSION_STATE_CHANGED"] = "xmpp.videoSIPGWSessionStateChanged";
+    /**
+     * Event indicating we have received a message from the visitors component.
+     */
+    XMPPEvents["VISITORS_MESSAGE"] = "xmpp.visitors_message";
+    /**
+     * Event indicating that our request for promotion was rejected.
+     */
+    XMPPEvents["VISITORS_REJECTION"] = "xmpp.visitors_rejection";
     // Designates an event indicating that the local ICE connection state has
     // changed.
     XMPPEvents["ICE_CONNECTION_STATE_CHANGED"] = "xmpp.ice_connection_state_changed";

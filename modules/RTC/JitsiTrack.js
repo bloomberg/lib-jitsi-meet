@@ -1,9 +1,9 @@
 import { getLogger } from '@jitsi/logger';
-import EventEmitter from 'events';
 
 import * as JitsiTrackEvents from '../../JitsiTrackEvents';
 import { MediaType } from '../../service/RTC/MediaType';
 import browser from '../browser';
+import EventEmitter from '../util/EventEmitter';
 
 import RTCUtils from './RTCUtils';
 
@@ -44,10 +44,6 @@ export default class JitsiTrack extends EventEmitter {
             videoType) {
         super();
 
-        // aliases for addListener/removeListener
-        this.addEventListener = this.addListener;
-        this.removeEventListener = this.off = this.removeListener;
-
         /**
          * Array with the HTML elements that are displaying the streams.
          * @type {Array}
@@ -81,8 +77,6 @@ export default class JitsiTrack extends EventEmitter {
         this._setStream(stream);
     }
 
-    /* eslint-enable max-params */
-
     /**
      * Adds onended/oninactive handler to a MediaStream or a MediaStreamTrack.
      * Firefox doesn't fire a inactive event on the MediaStream, instead it fires
@@ -95,6 +89,40 @@ export default class JitsiTrack extends EventEmitter {
         } else {
             this.stream.oninactive = handler;
         }
+    }
+
+    /**
+     * Attach time to first media tracker only if there is conference and only
+     * for the first element.
+     *
+     * @param {HTMLElement} container the HTML container which can be 'video' or
+     * 'audio' element.
+     * @private
+     */
+    _attachTTFMTracker(container) { // eslint-disable-line no-unused-vars
+        // Should be defined by the classes that are extending JitsiTrack
+    }
+
+    /**
+     * Called when the track has been attached to a new container.
+     *
+     * @param {HTMLElement} container the HTML container which can be 'video' or
+     * 'audio' element.
+     * @private
+     */
+    _onTrackAttach(container) { // eslint-disable-line no-unused-vars
+        // Should be defined by the classes that are extending JitsiTrack
+    }
+
+    /**
+     * Called when the track has been detached from a container.
+     *
+     * @param {HTMLElement} container the HTML container which can be 'video' or
+     * 'audio' element.
+     * @private
+     */
+    _onTrackDetach(container) { // eslint-disable-line no-unused-vars
+        // Should be defined by the classes that are extending JitsiTrack
     }
 
     /**
@@ -119,29 +147,6 @@ export default class JitsiTrack extends EventEmitter {
             for (const track of this.stream.getTracks()) {
                 track[trackHandler2Prop[type]] = handler;
             }
-        }
-    }
-
-    /**
-     * Unregisters all event handlers bound to the underlying media stream/track
-     * @private
-     */
-    _unregisterHandlers() {
-        if (!this.stream) {
-            logger.warn(
-                `${this}: unable to unregister handlers - no stream object`);
-
-            return;
-        }
-
-        for (const type of this.handlers.keys()) {
-            // FIXME Why only video tracks?
-            for (const videoTrack of this.stream.getVideoTracks()) {
-                videoTrack[trackHandler2Prop[type]] = undefined;
-            }
-        }
-        if (this._streamInactiveHandler) {
-            this._addMediaStreamInactiveHandler(undefined);
         }
     }
 
@@ -174,59 +179,112 @@ export default class JitsiTrack extends EventEmitter {
     }
 
     /**
-     * Returns the video type (camera or desktop) of this track.
+     * Unregisters all event handlers bound to the underlying media stream/track
+     * @private
      */
-    getVideoType() {
-        return this.videoType;
+    _unregisterHandlers() {
+        if (!this.stream) {
+            logger.warn(
+                `${this}: unable to unregister handlers - no stream object`);
+
+            return;
+        }
+
+        for (const type of this.handlers.keys()) {
+            // FIXME Why only video tracks?
+            for (const videoTrack of this.stream.getVideoTracks()) {
+                videoTrack[trackHandler2Prop[type]] = undefined;
+            }
+        }
+        if (this._streamInactiveHandler) {
+            this._addMediaStreamInactiveHandler(undefined);
+        }
     }
 
     /**
-     * Returns the type (audio or video) of this track.
-     */
-    getType() {
-        return this.type;
-    }
-
-    /**
-     * Check if this is an audio track.
-     */
-    isAudioTrack() {
-        return this.getType() === MediaType.AUDIO;
-    }
-
-    /**
-     * Checks whether the underlying WebRTC <tt>MediaStreamTrack</tt> is muted
-     * according to it's 'muted' field status.
-     * @return {boolean} <tt>true</tt> if the underlying
-     * <tt>MediaStreamTrack</tt> is muted or <tt>false</tt> otherwise.
-     */
-    isWebRTCTrackMuted() {
-        return this.track && this.track.muted;
-    }
-
-    /**
-     * Check if this is a video track.
-     */
-    isVideoTrack() {
-        return this.getType() === MediaType.VIDEO;
-    }
-
-    /**
-     * Checks whether this is a local track.
-     * @abstract
-     * @return {boolean} 'true' if it's a local track or 'false' otherwise.
-     */
-    isLocal() {
-        throw new Error('Not implemented by subclass');
-    }
-
-    /**
-     * Check whether this is a local audio track.
+     * Attaches the MediaStream of this track to an HTML container.
+     * Adds the container to the list of containers that are displaying the
+     * track.
      *
-     * @return {boolean} -  true if track represents a local audio track, false otherwise.
+     * @param container the HTML container which can be 'video' or 'audio'
+     * element.
+     *
+     * @returns {void}
      */
-    isLocalAudioTrack() {
-        return this.isAudioTrack() && this.isLocal();
+    attach(container) {
+        let result = Promise.resolve();
+
+        if (this.stream) {
+            this._onTrackAttach(container);
+            result = RTCUtils.attachMediaStream(container, this.stream);
+        }
+        this.containers.push(container);
+        this._attachTTFMTracker(container);
+
+        return result;
+    }
+
+    /**
+     * Removes this JitsiTrack from the passed HTML container.
+     *
+     * @param container the HTML container to detach from this JitsiTrack. If
+     * <tt>null</tt> or <tt>undefined</tt>, all containers are removed. A
+     * container can be a 'video', 'audio' or 'object' HTML element instance to
+     * which this JitsiTrack is currently attached.
+     */
+    detach(container) {
+        for (let cs = this.containers, i = cs.length - 1; i >= 0; --i) {
+            const c = cs[i];
+
+            if (!container) {
+                this._onTrackDetach(c);
+                RTCUtils.attachMediaStream(c, null).catch(() => {
+                    logger.error(`Detach for ${this} failed!`);
+                });
+            }
+            if (!container || c === container) {
+                cs.splice(i, 1);
+            }
+        }
+
+        if (container) {
+            this._onTrackDetach(container);
+            RTCUtils.attachMediaStream(container, null).catch(() => {
+                logger.error(`Detach for ${this} failed!`);
+            });
+        }
+    }
+
+    /**
+     * Removes attached event listeners.
+     *
+     * @returns {Promise}
+     */
+    dispose() {
+        this.removeAllListeners();
+
+        this.disposed = true;
+
+        return Promise.resolve();
+    }
+
+    /**
+     * Returns id of the track.
+     * @returns {string|null} id of the track or null if this is fake track.
+     */
+    getId() {
+        return this.getStreamId();
+    }
+
+    /**
+     * Returns the msid of the stream attached to the JitsiTrack object or null
+     * if no stream is attached.
+     */
+    getMSID() {
+        const streamId = this.getStreamId();
+        const trackId = this.getTrackId();
+
+        return streamId && trackId ? `${streamId} ${trackId}` : null;
     }
 
     /**
@@ -234,6 +292,14 @@ export default class JitsiTrack extends EventEmitter {
      */
     getOriginalStream() {
         return this.stream;
+    }
+
+    /**
+     * Returns the source name of the track.
+     * @returns {String|undefined}
+     */
+    getSourceName() { // eslint-disable-line no-unused-vars
+        // Should be defined by the classes that are extending JitsiTrack
     }
 
     /**
@@ -269,6 +335,13 @@ export default class JitsiTrack extends EventEmitter {
     }
 
     /**
+     * Returns the type (audio or video) of this track.
+     */
+    getType() {
+        return this.type;
+    }
+
+    /**
      * Return meaningful usage label for this track depending on it's media and
      * eventual video type.
      * @returns {string}
@@ -282,117 +355,24 @@ export default class JitsiTrack extends EventEmitter {
     }
 
     /**
-     * Eventually will trigger RTCEvents.TRACK_ATTACHED event.
-     * @param container the video/audio container to which this stream is
-     *        attached and for which event will be fired.
-     * @private
+     * Returns the video type (camera or desktop) of this track.
      */
-    _maybeFireTrackAttached(container) {
-        if (this.conference && container) {
-            this.conference._onTrackAttach(this, container);
-        }
+    getVideoType() {
+        return this.videoType;
     }
 
     /**
-     * Attaches the MediaStream of this track to an HTML container.
-     * Adds the container to the list of containers that are displaying the
-     * track.
-     *
-     * @param container the HTML container which can be 'video' or 'audio'
-     * element.
-     *
-     * @returns {void}
+     * Returns the height of the track in normalized landscape format.
      */
-    attach(container) {
-        if (this.stream) {
-            this._onTrackAttach(container);
-            RTCUtils.attachMediaStream(container, this.stream);
-        }
-        this.containers.push(container);
-        this._maybeFireTrackAttached(container);
-        this._attachTTFMTracker(container);
+    getHeight() {
+        return Math.min(this.track.getSettings().height, this.track.getSettings().width);
     }
 
     /**
-     * Removes this JitsiTrack from the passed HTML container.
-     *
-     * @param container the HTML container to detach from this JitsiTrack. If
-     * <tt>null</tt> or <tt>undefined</tt>, all containers are removed. A
-     * container can be a 'video', 'audio' or 'object' HTML element instance to
-     * which this JitsiTrack is currently attached.
+     * Returns the width of the track in normalized landscape format.
      */
-    detach(container) {
-        for (let cs = this.containers, i = cs.length - 1; i >= 0; --i) {
-            const c = cs[i];
-
-            if (!container) {
-                this._onTrackDetach(c);
-                RTCUtils.attachMediaStream(c, null);
-            }
-            if (!container || c === container) {
-                cs.splice(i, 1);
-            }
-        }
-
-        if (container) {
-            this._onTrackDetach(container);
-            RTCUtils.attachMediaStream(container, null);
-        }
-    }
-
-    /**
-     * Called when the track has been attached to a new container.
-     *
-     * @param {HTMLElement} container the HTML container which can be 'video' or
-     * 'audio' element.
-     * @private
-     */
-    _onTrackAttach(container) { // eslint-disable-line no-unused-vars
-        // Should be defined by the classes that are extending JitsiTrack
-    }
-
-    /**
-     * Called when the track has been detached from a container.
-     *
-     * @param {HTMLElement} container the HTML container which can be 'video' or
-     * 'audio' element.
-     * @private
-     */
-    _onTrackDetach(container) { // eslint-disable-line no-unused-vars
-        // Should be defined by the classes that are extending JitsiTrack
-    }
-
-    /**
-     * Attach time to first media tracker only if there is conference and only
-     * for the first element.
-     *
-     * @param {HTMLElement} container the HTML container which can be 'video' or
-     * 'audio' element.
-     * @private
-     */
-    _attachTTFMTracker(container) { // eslint-disable-line no-unused-vars
-        // Should be defined by the classes that are extending JitsiTrack
-    }
-
-    /**
-     * Removes attached event listeners.
-     *
-     * @returns {Promise}
-     */
-    dispose() {
-        this.removeAllListeners();
-
-        this.disposed = true;
-
-        return Promise.resolve();
-    }
-
-    /**
-     * Returns id of the track.
-     * @returns {string|null} id of the track or null if this is fake track.
-     */
-    getId() {
-        return this.getStreamId();
+    getWidth() {
+        return Math.max(this.track.getSettings().height, this.track.getSettings().width);
     }
 
     /**
@@ -407,6 +387,48 @@ export default class JitsiTrack extends EventEmitter {
         }
 
         return true;
+    }
+
+    /**
+     * Check if this is an audio track.
+     */
+    isAudioTrack() {
+        return this.getType() === MediaType.AUDIO;
+    }
+
+    /**
+     * Checks whether this is a local track.
+     * @abstract
+     * @return {boolean} 'true' if it's a local track or 'false' otherwise.
+     */
+    isLocal() {
+        throw new Error('Not implemented by subclass');
+    }
+
+    /**
+     * Check whether this is a local audio track.
+     *
+     * @return {boolean} -  true if track represents a local audio track, false otherwise.
+     */
+    isLocalAudioTrack() {
+        return this.isAudioTrack() && this.isLocal();
+    }
+
+    /**
+     * Check if this is a video track.
+     */
+    isVideoTrack() {
+        return this.getType() === MediaType.VIDEO;
+    }
+
+    /**
+     * Checks whether the underlying WebRTC <tt>MediaStreamTrack</tt> is muted
+     * according to it's 'muted' field status.
+     * @return {boolean} <tt>true</tt> if the underlying
+     * <tt>MediaStreamTrack</tt> is muted or <tt>false</tt> otherwise.
+     */
+    isWebRTCTrackMuted() {
+        return this.track && this.track.muted;
     }
 
     /**
@@ -445,17 +467,6 @@ export default class JitsiTrack extends EventEmitter {
                 JitsiTrackEvents.NO_AUDIO_INPUT,
                 newAudioLevel);
         }
-    }
-
-    /**
-     * Returns the msid of the stream attached to the JitsiTrack object or null
-     * if no stream is attached.
-     */
-    getMSID() {
-        const streamId = this.getStreamId();
-        const trackId = this.getTrackId();
-
-        return streamId && trackId ? `${streamId} ${trackId}` : null;
     }
 
     /**
@@ -498,5 +509,14 @@ export default class JitsiTrack extends EventEmitter {
                         JitsiTrackEvents.TRACK_AUDIO_OUTPUT_CHANGED,
                         audioOutputDeviceId);
                 }));
+    }
+
+    /**
+     * Assigns the source name to a track.
+     * @param {String} name - The name to be assigned to the track.
+     * @returns {void}
+     */
+    setSourceName(name) { // eslint-disable-line no-unused-vars
+        // Should be defined by the classes that are extending JitsiTrack
     }
 }

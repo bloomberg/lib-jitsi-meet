@@ -3,12 +3,12 @@ import { Strophe } from 'strophe.js';
 
 import * as JitsiConferenceErrors from './JitsiConferenceErrors';
 import * as JitsiConferenceEvents from './JitsiConferenceEvents';
+import * as JitsiTrackEvents from './JitsiTrackEvents';
 import { SPEAKERS_AUDIO_LEVELS } from './modules/statistics/constants';
 import Statistics from './modules/statistics/statistics';
 import EventEmitterForwarder from './modules/util/EventEmitterForwarder';
 import { MediaType } from './service/RTC/MediaType';
 import RTCEvents from './service/RTC/RTCEvents';
-import { VideoType } from './service/RTC/VideoType';
 import AuthenticationEvents
     from './service/authentication/AuthenticationEvents';
 import {
@@ -30,26 +30,6 @@ const logger = getLogger(__filename);
 export default function JitsiConferenceEventManager(conference) {
     this.conference = conference;
     this.xmppListeners = {};
-
-    // Listeners related to the conference only
-    conference.on(JitsiConferenceEvents.TRACK_MUTE_CHANGED,
-        track => {
-            if (!track.isLocal() || !conference.statistics) {
-                return;
-            }
-            const session
-                = track.isP2P
-                    ? conference.p2pJingleSession : conference.jvbJingleSession;
-
-            // TPC will be null, before the conference starts, but the event
-            // still should be queued
-            const tpc = (session && session.peerconnection) || null;
-
-            conference.statistics.sendMuteEvent(
-                tpc,
-                track.isMuted(),
-                track.getType());
-        });
 }
 
 /**
@@ -190,9 +170,17 @@ JitsiConferenceEventManager.prototype.setupChatRoomListeners = function() {
         }
     });
 
+    chatRoom.addListener(JitsiTrackEvents.TRACK_REMOVED, track => {
+        conference.eventEmitter.emit(JitsiConferenceEvents.TRACK_REMOVED, track);
+    });
+
     this.chatRoomForwarder.forward(XMPPEvents.ROOM_JOIN_ERROR,
         JitsiConferenceEvents.CONFERENCE_FAILED,
         JitsiConferenceErrors.CONNECTION_ERROR);
+
+    this.chatRoomForwarder.forward(XMPPEvents.DISPLAY_NAME_REQUIRED,
+        JitsiConferenceEvents.CONFERENCE_FAILED,
+        JitsiConferenceErrors.DISPLAY_NAME_REQUIRED);
 
     this.chatRoomForwarder.forward(XMPPEvents.ROOM_CONNECT_ERROR,
         JitsiConferenceEvents.CONFERENCE_FAILED,
@@ -207,7 +195,6 @@ JitsiConferenceEventManager.prototype.setupChatRoomListeners = function() {
     this.chatRoomForwarder.forward(XMPPEvents.ROOM_MAX_USERS_ERROR,
         JitsiConferenceEvents.CONFERENCE_FAILED,
         JitsiConferenceErrors.CONFERENCE_MAX_USERS);
-    chatRoom.addListener(XMPPEvents.ROOM_MAX_USERS_ERROR, () => conference.leave());
 
     this.chatRoomForwarder.forward(XMPPEvents.PASSWORD_REQUIRED,
         JitsiConferenceEvents.CONFERENCE_FAILED,
@@ -232,7 +219,6 @@ JitsiConferenceEventManager.prototype.setupChatRoomListeners = function() {
     this.chatRoomForwarder.forward(XMPPEvents.RESERVATION_ERROR,
         JitsiConferenceEvents.CONFERENCE_FAILED,
         JitsiConferenceErrors.RESERVATION_ERROR);
-    chatRoom.addListener(XMPPEvents.RESERVATION_ERROR, () => conference.leave());
 
     this.chatRoomForwarder.forward(XMPPEvents.GRACEFUL_SHUTDOWN,
         JitsiConferenceEvents.CONFERENCE_FAILED,
@@ -246,7 +232,6 @@ JitsiConferenceEventManager.prototype.setupChatRoomListeners = function() {
     this.chatRoomForwarder.forward(XMPPEvents.MUC_DESTROYED,
         JitsiConferenceEvents.CONFERENCE_FAILED,
         JitsiConferenceErrors.CONFERENCE_DESTROYED);
-    chatRoom.addListener(XMPPEvents.MUC_DESTROYED, () => conference.leave());
 
     this.chatRoomForwarder.forward(XMPPEvents.CHAT_ERROR_RECEIVED,
         JitsiConferenceEvents.CONFERENCE_ERROR,
@@ -283,11 +268,18 @@ JitsiConferenceEventManager.prototype.setupChatRoomListeners = function() {
                 const resource = Strophe.getResourceFromJid(jid);
                 const participant = conference.getParticipantById(resource) || resource;
 
-                if (session.getStatus() === 'off') {
+                // #bloomberg @lzhong57 utilizing getStatusFromJicofo to determine session status
+                // if (session.getStatus() === 'off') {
+                //     session.setTerminator(participant);
+                // } else if (session.getStatus() === 'on') {
+                //     session.setInitiator(participant);
+                // }
+                if (session.getStatusFromJicofo() === 'off') {
                     session.setTerminator(participant);
-                } else if (session.getStatus() === 'on') {
+                } else if (session.getStatusFromJicofo() === 'on') {
                     session.setInitiator(participant);
                 }
+                // #end
             }
 
             conference.eventEmitter.emit(
@@ -354,20 +346,6 @@ JitsiConferenceEventManager.prototype.setupChatRoomListeners = function() {
 
     chatRoom.addListener(XMPPEvents.LOCAL_ROLE_CHANGED, role => {
         conference.onLocalRoleChanged(role);
-
-        // log all events for the recorder operated by the moderator
-        if (conference.statistics && conference.isModerator()) {
-            conference.on(JitsiConferenceEvents.RECORDER_STATE_CHANGED,
-                recorderSession => {
-                    const logObject = {
-                        error: recorderSession.getError(),
-                        id: 'recorder_status',
-                        status: recorderSession.getStatus()
-                    };
-
-                    Statistics.sendLog(JSON.stringify(logObject));
-                });
-        }
     });
 
     chatRoom.addListener(XMPPEvents.MUC_ROLE_CHANGED,
@@ -386,12 +364,12 @@ JitsiConferenceEventManager.prototype.setupChatRoomListeners = function() {
         XMPPEvents.MESSAGE_RECEIVED,
 
         // eslint-disable-next-line max-params
-        (jid, txt, myJid, ts) => {
+        (jid, txt, myJid, ts, nick, isGuest) => {
             const id = Strophe.getResourceFromJid(jid);
 
             conference.eventEmitter.emit(
                 JitsiConferenceEvents.MESSAGE_RECEIVED,
-                id, txt, ts);
+                id, txt, ts, nick, isGuest);
         });
 
     chatRoom.addListener(
@@ -436,22 +414,16 @@ JitsiConferenceEventManager.prototype.setupChatRoomListeners = function() {
         });
 
     chatRoom.addPresenceListener('startmuted', (data, from) => {
-        let isModerator = false;
-
-        if (conference.myUserId() === from && conference.isModerator()) {
-            isModerator = true;
-        } else {
-            const participant = conference.getParticipantById(from);
-
-            if (participant && participant.isModerator()) {
-                isModerator = true;
-            }
-        }
-
-        if (!isModerator) {
+        // Ignore the strartmuted policy if the presence is received from self. The moderator should join with
+        // available local sources and the policy needs to be applied only on users that join the call after.
+        if (conference.myUserId() === from) {
             return;
         }
+        const participant = conference.getParticipantById(from);
 
+        if (!participant || !participant.isModerator()) {
+            return;
+        }
         const startAudioMuted = data.attributes.audio === 'true';
         const startVideoMuted = data.attributes.video === 'true';
 
@@ -474,21 +446,6 @@ JitsiConferenceEventManager.prototype.setupChatRoomListeners = function() {
             );
         }
     });
-
-    if (conference.statistics) {
-        // FIXME ICE related events should end up in RTCEvents eventually
-        chatRoom.addListener(XMPPEvents.CONNECTION_ICE_FAILED,
-            session => {
-                conference.statistics.sendIceConnectionFailedEvent(
-                    session.peerconnection);
-            });
-
-        // FIXME XMPPEvents.ADD_ICE_CANDIDATE_FAILED is never emitted
-        chatRoom.addListener(XMPPEvents.ADD_ICE_CANDIDATE_FAILED,
-            (e, pc) => {
-                conference.statistics.sendAddIceCandidateFailed(e, pc);
-            });
-    }
 
     // Breakout rooms.
     this.chatRoomForwarder.forward(XMPPEvents.BREAKOUT_ROOMS_MOVE_TO_ROOM,
@@ -526,7 +483,7 @@ JitsiConferenceEventManager.prototype.setupRTCListeners = function() {
                     JitsiConferenceEvents.DOMINANT_SPEAKER_CHANGED, dominant, previous, silence);
                 if (conference.statistics && conference.myUserId() === dominant) {
                     // We are the new dominant speaker.
-                    conference.statistics.sendDominantSpeakerEvent(conference.room.roomjid, silence);
+                    conference.xmpp.sendDominantSpeakerEvent(conference.room.roomjid, silence);
                 }
                 if (conference.lastDominantSpeaker !== dominant) {
                     if (previous && previous.length) {
@@ -560,6 +517,22 @@ JitsiConferenceEventManager.prototype.setupRTCListeners = function() {
         conference.eventEmitter.emit(JitsiConferenceEvents.DATA_CHANNEL_OPENED);
     });
 
+    rtc.addListener(RTCEvents.DATA_CHANNEL_CLOSED, ev => {
+        conference.eventEmitter.emit(JitsiConferenceEvents.DATA_CHANNEL_CLOSED, ev);
+    });
+
+    rtc.addListener(RTCEvents.VIDEO_SSRCS_REMAPPED, msg => {
+        for (const session of this.conference.getMediaSessions()) {
+            session.processSourceMap(msg, MediaType.VIDEO);
+        }
+    });
+
+    rtc.addListener(RTCEvents.AUDIO_SSRCS_REMAPPED, msg => {
+        for (const session of this.conference.getMediaSessions()) {
+            session.processSourceMap(msg, MediaType.AUDIO);
+        }
+    });
+
     rtc.addListener(RTCEvents.ENDPOINT_MESSAGE_RECEIVED,
         (from, payload) => {
             const participant = conference.getParticipantById(from);
@@ -587,42 +560,8 @@ JitsiConferenceEventManager.prototype.setupRTCListeners = function() {
             }
         });
 
-    rtc.addListener(RTCEvents.LOCAL_UFRAG_CHANGED,
-        (tpc, ufrag) => {
-            if (!tpc.isP2P) {
-                Statistics.sendLog(
-                    JSON.stringify({
-                        id: 'local_ufrag',
-                        value: ufrag
-                    }));
-                // #bloomberg #log @rpang27 log local_ufrag
-                logger.info(JSON.stringify({
-                    id: 'local_ufrag',
-                    value: ufrag
-                }));
-                // #end
-            }
-        });
-    rtc.addListener(RTCEvents.REMOTE_UFRAG_CHANGED,
-        (tpc, ufrag) => {
-            if (!tpc.isP2P) {
-                Statistics.sendLog(
-                    JSON.stringify({
-                        id: 'remote_ufrag',
-                        value: ufrag
-                    }));
-                // #bloomberg #log @rpang27 log remote_ufrag
-                logger.info(JSON.stringify({
-                    id: 'remote_ufrag',
-                    value: ufrag
-                }));
-                // #end
-            }
-        });
-
     rtc.addListener(RTCEvents.CREATE_ANSWER_FAILED,
         (e, tpc) => {
-            conference.statistics.sendCreateAnswerFailed(e, tpc);
             if (!tpc.isP2P) {
                 conference.eventEmitter.emit(JitsiConferenceEvents.CONFERENCE_FAILED,
                     JitsiConferenceErrors.OFFER_ANSWER_FAILED, e);
@@ -631,7 +570,6 @@ JitsiConferenceEventManager.prototype.setupRTCListeners = function() {
 
     rtc.addListener(RTCEvents.CREATE_OFFER_FAILED,
         (e, tpc) => {
-            conference.statistics.sendCreateOfferFailed(e, tpc);
             if (!tpc.isP2P) {
                 conference.eventEmitter.emit(JitsiConferenceEvents.CONFERENCE_FAILED,
                     JitsiConferenceErrors.OFFER_ANSWER_FAILED, e);
@@ -640,7 +578,6 @@ JitsiConferenceEventManager.prototype.setupRTCListeners = function() {
 
     rtc.addListener(RTCEvents.SET_LOCAL_DESCRIPTION_FAILED,
         (e, tpc) => {
-            conference.statistics.sendSetLocalDescFailed(e, tpc);
             if (!tpc.isP2P) {
                 conference.eventEmitter.emit(JitsiConferenceEvents.CONFERENCE_FAILED,
                     JitsiConferenceErrors.OFFER_ANSWER_FAILED, e);
@@ -649,21 +586,9 @@ JitsiConferenceEventManager.prototype.setupRTCListeners = function() {
 
     rtc.addListener(RTCEvents.SET_REMOTE_DESCRIPTION_FAILED,
         (e, tpc) => {
-            conference.statistics.sendSetRemoteDescFailed(e, tpc);
             if (!tpc.isP2P) {
                 conference.eventEmitter.emit(JitsiConferenceEvents.CONFERENCE_FAILED,
                     JitsiConferenceErrors.OFFER_ANSWER_FAILED, e);
-            }
-        });
-
-    rtc.addListener(RTCEvents.LOCAL_TRACK_SSRC_UPDATED,
-        (track, ssrc) => {
-            // when starting screen sharing, the track is created and when
-            // we do set local description and we process the ssrc we
-            // will be notified for it and we will report it with the event
-            // for screen sharing
-            if (track.isVideoTrack() && track.videoType === VideoType.DESKTOP) {
-                conference.statistics.sendScreenSharingEvent(true, ssrc);
             }
         });
 };
@@ -778,6 +703,11 @@ JitsiConferenceEventManager.prototype.setupXMPPListeners = function() {
         value => {
             conference.eventEmitter.emit(JitsiConferenceEvents.AV_MODERATION_REJECTED, { mediaType: value });
         });
+
+    this._addConferenceXMPPListener(XMPPEvents.VISITORS_MESSAGE,
+        value => conference.eventEmitter.emit(JitsiConferenceEvents.VISITORS_MESSAGE, value));
+    this._addConferenceXMPPListener(XMPPEvents.VISITORS_REJECTION,
+        () => conference.eventEmitter.emit(JitsiConferenceEvents.VISITORS_REJECTION));
 };
 
 /**

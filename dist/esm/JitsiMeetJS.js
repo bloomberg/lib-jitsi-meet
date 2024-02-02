@@ -22,9 +22,9 @@ import * as JitsiTrackErrors from './JitsiTrackErrors';
 import * as JitsiTrackEvents from './JitsiTrackEvents';
 import * as JitsiTranscriptionStatus from './JitsiTranscriptionStatus';
 import RTC from './modules/RTC/RTC';
+import RTCStats from './modules/RTCStats/RTCStats';
 import browser from './modules/browser';
 import NetworkInfo from './modules/connectivity/NetworkInfo';
-import { ParticipantConnectionStatus } from './modules/connectivity/ParticipantConnectionStatus';
 import { TrackStreamingStatus } from './modules/connectivity/TrackStreamingStatus';
 import getActiveAudioDevice from './modules/detection/ActiveDeviceDetector';
 import * as DetectionEvents from './modules/detection/DetectionEvents';
@@ -34,10 +34,7 @@ import ProxyConnectionService from './modules/proxyconnection/ProxyConnectionSer
 import recordingConstants from './modules/recording/recordingConstants';
 import Settings from './modules/settings/Settings';
 import LocalStatsCollector from './modules/statistics/LocalStatsCollector';
-import precallTest from './modules/statistics/PrecallTest';
 import Statistics from './modules/statistics/statistics';
-import AuthUtil from './modules/util/AuthUtil';
-import GlobalOnErrorHandler from './modules/util/GlobalOnErrorHandler';
 import ScriptUtil from './modules/util/ScriptUtil';
 import * as VideoSIPGWConstants from './modules/videosipgw/VideoSIPGWConstants';
 import AudioMixer from './modules/webaudio/AudioMixer';
@@ -45,12 +42,17 @@ import { MediaType } from './service/RTC/MediaType';
 import * as ConnectionQualityEvents from './service/connectivity/ConnectionQualityEvents';
 import * as E2ePingEvents from './service/e2eping/E2ePingEvents';
 import { createGetUserMediaEvent } from './service/statistics/AnalyticsEvents';
+import * as RTCStatsEvents from './modules/RTCStats/RTCStatsEvents';
 const logger = Logger.getLogger(__filename);
 /**
  * The amount of time to wait until firing
  * {@link JitsiMediaDevicesEvents.PERMISSION_PROMPT_IS_SHOWN} event.
  */
 const USER_MEDIA_SLOW_PROMISE_TIMEOUT = 1000;
+/**
+ * Indicates whether GUM has been executed or not.
+ */
+let hasGUMExecuted = false;
 /**
  * Extracts from an 'options' objects with a specific format (TODO what IS the
  * format?) the attributes which are to be logged in analytics events.
@@ -59,45 +61,19 @@ const USER_MEDIA_SLOW_PROMISE_TIMEOUT = 1000;
  * @returns {*} the attributes to attach to analytics events.
  */
 function getAnalyticsAttributesFromOptions(options) {
-    const attributes = {
-        'audio_requested': options.devices.includes('audio'),
-        'video_requested': options.devices.includes('video'),
-        'screen_sharing_requested': options.devices.includes('desktop')
-    };
+    const attributes = {};
+    attributes['audio_requested'] = options.devices.includes('audio');
+    attributes['video_requested'] = options.devices.includes('video');
+    attributes['screen_sharing_requested'] = options.devices.includes('desktop');
     if (attributes.video_requested) {
         attributes.resolution = options.resolution;
     }
     return attributes;
 }
 /**
- * Tries to deal with the following problem: {@code JitsiMeetJS} is not only
- * this module, it's also a global (i.e. attached to {@code window}) namespace
- * for all globals of the projects in the Jitsi Meet family. If lib-jitsi-meet
- * is loaded through an HTML {@code script} tag, {@code JitsiMeetJS} will
- * automatically be attached to {@code window} by webpack. Unfortunately,
- * webpack's source code does not check whether the global variable has already
- * been assigned and overwrites it. Which is OK for the module
- * {@code JitsiMeetJS} but is not OK for the namespace {@code JitsiMeetJS}
- * because it may already contain the values of other projects in the Jitsi Meet
- * family. The solution offered here works around webpack by merging all
- * existing values of the namespace {@code JitsiMeetJS} into the module
- * {@code JitsiMeetJS}.
- *
- * @param {Object} module - The module {@code JitsiMeetJS} (which will be
- * exported and may be attached to {@code window} by webpack later on).
- * @private
- * @returns {Object} - A {@code JitsiMeetJS} module which contains all existing
- * value of the namespace {@code JitsiMeetJS} (if any).
- */
-function _mergeNamespaceAndModule(module) {
-    return (typeof window.JitsiMeetJS === 'object'
-        ? Object.assign({}, window.JitsiMeetJS, module)
-        : module);
-}
-/**
  * The public API of the Jitsi Meet library (a.k.a. {@code JitsiMeetJS}).
  */
-export default _mergeNamespaceAndModule({
+export default {
     version: '{#COMMIT_HASH#}',
     JitsiConnection,
     /**
@@ -109,7 +85,6 @@ export default _mergeNamespaceAndModule({
      */
     ProxyConnectionService,
     constants: {
-        participantConnectionStatus: ParticipantConnectionStatus,
         recording: recordingConstants,
         sipVideoGW: VideoSIPGWConstants,
         transcriptionStatus: JitsiTranscriptionStatus,
@@ -122,7 +97,8 @@ export default _mergeNamespaceAndModule({
         track: JitsiTrackEvents,
         mediaDevices: JitsiMediaDevicesEvents,
         connectionQuality: ConnectionQualityEvents,
-        e2eping: E2ePingEvents
+        e2eping: E2ePingEvents,
+        rtcstats: RTCStatsEvents
     },
     errors: {
         conference: JitsiConferenceErrors,
@@ -136,14 +112,11 @@ export default _mergeNamespaceAndModule({
     mediaDevices: JitsiMediaDevices,
     analytics: Statistics.analytics,
     init(options = {}) {
+        // @ts-ignore
+        logger.info(`This appears to be ${browser.getName()}, ver: ${browser.getVersion()}`);
         Settings.init(options.externalStorage);
         Statistics.init(options);
         const flags = options.flags || {};
-        // Multi-stream is supported only on endpoints running in Unified plan mode and the flag to disable unified
-        // plan also needs to be taken into consideration.
-        if (typeof options.enableUnifiedOnChrome !== 'undefined') {
-            flags.enableUnifiedOnChrome = options.enableUnifiedOnChrome;
-        }
         // Configure the feature flags.
         FeatureFlags.init(flags);
         // Initialize global window.connectionTimes
@@ -154,20 +127,6 @@ export default _mergeNamespaceAndModule({
         if (options.enableAnalyticsLogging !== true) {
             logger.warn('Analytics disabled, disposing.');
             this.analytics.dispose();
-        }
-        if (options.enableWindowOnErrorHandler) {
-            GlobalOnErrorHandler.addHandler(this.getGlobalOnErrorHandler.bind(this));
-        }
-        if (this.version) {
-            const logObject = {
-                id: 'component_version',
-                component: 'lib-jitsi-meet',
-                version: this.version
-            };
-            Statistics.sendLog(JSON.stringify(logObject));
-            // #bloomberg #log @rpang27 log component_version
-            logger.info(JSON.stringify(logObject));
-            // #end
         }
         return RTC.init(options);
     },
@@ -192,6 +151,40 @@ export default _mergeNamespaceAndModule({
     },
     setLogLevel(level) {
         Logger.setLogLevel(level);
+    },
+    /**
+     * Expose rtcstats to the public API.
+     */
+    rtcstats: {
+        /**
+         * Sends identity data to the rtcstats server. This data is used
+         * to identify the specifics of a particular client, it can be any object
+         * and will show in the generated rtcstats dump under "identity" entries.
+         *
+         * @param {Object} identityData - Identity data to send.
+         * @returns {void}
+         */
+        sendIdentityEntry(identityData) {
+            RTCStats.sendIdentity(identityData);
+        },
+        /**
+         * Sends a stats entry to rtcstats server.
+         * @param {string} statsType - The type of stats to send.
+         * @param {Object} data - The stats data to send.
+         */
+        sendStatsEntry(statsType, data) {
+            RTCStats.sendStatsEntry(statsType, null, data);
+        },
+        /**
+         * Events generated by rtcstats, such as PeerConnections state,
+         * and websocket connection state.
+         *
+         * @param {RTCStatsEvents} event - The event name.
+         * @param {function} handler - The event handler.
+         */
+        on(event, handler) {
+            RTCStats.events.on(event, handler);
+        }
     },
     /**
      * Sets the log level to the <tt>Logger</tt> instance with given id.
@@ -275,27 +268,37 @@ export default _mergeNamespaceAndModule({
         const { firePermissionPromptIsShownEvent, fireSlowPromiseEvent } = options, restOptions = __rest(options, ["firePermissionPromptIsShownEvent", "fireSlowPromiseEvent"]);
         const firePermissionPrompt = firePermissionPromptIsShownEvent || oldfirePermissionPromptIsShownEvent;
         if (firePermissionPrompt && !RTC.arePermissionsGrantedForAvailableDevices()) {
-            JitsiMediaDevices.emitEvent(JitsiMediaDevicesEvents.PERMISSION_PROMPT_IS_SHOWN, browser.getName());
+            // @ts-ignore
+            JitsiMediaDevices.emit(JitsiMediaDevicesEvents.PERMISSION_PROMPT_IS_SHOWN, browser.getName());
         }
         else if (fireSlowPromiseEvent) {
             window.setTimeout(() => {
                 if (!promiseFulfilled) {
-                    JitsiMediaDevices.emitEvent(JitsiMediaDevicesEvents.SLOW_GET_USER_MEDIA);
+                    JitsiMediaDevices.emit(JitsiMediaDevicesEvents.SLOW_GET_USER_MEDIA);
                 }
             }, USER_MEDIA_SLOW_PROMISE_TIMEOUT);
         }
+        let isFirstGUM = false;
+        let startTS = window.performance.now();
         if (!window.connectionTimes) {
             window.connectionTimes = {};
         }
-        window.connectionTimes['obtainPermissions.start']
-            = window.performance.now();
+        if (!hasGUMExecuted) {
+            hasGUMExecuted = true;
+            isFirstGUM = true;
+            window.connectionTimes['firstObtainPermissions.start'] = startTS;
+        }
+        window.connectionTimes['obtainPermissions.start'] = startTS;
         return RTC.obtainAudioAndVideoPermissions(restOptions)
             .then(tracks => {
             promiseFulfilled = true;
-            window.connectionTimes['obtainPermissions.end']
-                = window.performance.now();
+            let endTS = window.performance.now();
+            window.connectionTimes['obtainPermissions.end'] = endTS;
+            if (isFirstGUM) {
+                window.connectionTimes['firstObtainPermissions.end'] = endTS;
+            }
             Statistics.sendAnalytics(createGetUserMediaEvent('success', getAnalyticsAttributesFromOptions(restOptions)));
-            if (!RTC.options.disableAudioLevels) {
+            if (this.isCollectingLocalStats()) {
                 for (let i = 0; i < tracks.length; i++) {
                     const track = tracks[i];
                     if (track.getType() === MediaType.AUDIO) {
@@ -311,54 +314,53 @@ export default _mergeNamespaceAndModule({
                     track._setRealDeviceIdFromDeviceList(currentlyAvailableMediaDevices);
                 }
             }
-            // set the contentHint to "detail" for desktop tracks
-            // eslint-disable-next-line prefer-const
-            for (const track of tracks) {
-                if (track.type === MediaType.VIDEO
-                    && track.videoType === 'desktop') {
-                    this.setVideoTrackContentHints(track.track, 'detail');
-                }
-            }
             return tracks;
         })
             .catch(error => {
             promiseFulfilled = true;
             if (error.name === JitsiTrackErrors.SCREENSHARING_USER_CANCELED) {
-                // User cancelled action is not really an error, so only
-                // log it as an event to avoid having conference classified
-                // as partially failed
-                const logObject = {
-                    id: 'screensharing_user_canceled',
-                    message: error.message
-                };
-                Statistics.sendLog(JSON.stringify(logObject));
                 Statistics.sendAnalytics(createGetUserMediaEvent('warning', {
                     reason: 'extension install user canceled'
                 }));
             }
             else if (error.name === JitsiTrackErrors.NOT_FOUND) {
-                // logs not found devices with just application log to cs
-                const logObject = {
-                    id: 'usermedia_missing_device',
-                    status: error.gum.devices
-                };
-                Statistics.sendLog(JSON.stringify(logObject));
                 const attributes = getAnalyticsAttributesFromOptions(options);
                 attributes.reason = 'device not found';
                 attributes.devices = error.gum.devices.join('.');
                 Statistics.sendAnalytics(createGetUserMediaEvent('error', attributes));
             }
             else {
-                // Report gUM failed to the stats
-                Statistics.sendGetUserMediaFailed(error);
                 const attributes = getAnalyticsAttributesFromOptions(options);
                 attributes.reason = error.name;
                 Statistics.sendAnalytics(createGetUserMediaEvent('error', attributes));
             }
-            window.connectionTimes['obtainPermissions.end']
-                = window.performance.now();
+            let endTS = window.performance.now();
+            window.connectionTimes['obtainPermissions.end'] = endTS;
+            if (isFirstGUM) {
+                window.connectionTimes['firstObtainPermissions.end'] = endTS;
+            }
             return Promise.reject(error);
         });
+    },
+    /**
+     * Manually create JitsiLocalTrack's from the provided track info, by exposing the RTC method
+     *
+     * @param {Array<ICreateLocalTrackFromMediaStreamOptions>} tracksInfo - array of track information
+     * @returns {Array<JitsiLocalTrack>} - created local tracks
+     */
+    createLocalTracksFromMediaStreams(tracksInfo) {
+        return RTC.createLocalTracks(tracksInfo.map((trackInfo) => {
+            const tracks = trackInfo.stream.getTracks()
+                .filter(track => track.kind === trackInfo.mediaType);
+            if (!tracks || tracks.length === 0) {
+                throw new JitsiTrackError(JitsiTrackErrors.TRACK_NO_STREAM_TRACKS_FOUND, null, null);
+            }
+            if (tracks.length > 1) {
+                throw new JitsiTrackError(JitsiTrackErrors.TRACK_TOO_MANY_TRACKS_IN_STREAM, null, null);
+            }
+            trackInfo.track = tracks[0];
+            return trackInfo;
+        }));
     },
     /**
      * Create a TrackVADEmitter service that connects an audio track to an VAD (voice activity detection) processor in
@@ -438,8 +440,7 @@ export default _mergeNamespaceAndModule({
      * @param {boolean} True if stats are being collected for local tracks.
      */
     isCollectingLocalStats() {
-        return Statistics.audioLevelsEnabled
-            && LocalStatsCollector.isLocalStatsSupported();
+        return Statistics.audioLevelsEnabled && LocalStatsCollector.isLocalStatsSupported();
     },
     /**
      * Executes callback with list of media devices connected.
@@ -452,54 +453,23 @@ export default _mergeNamespaceAndModule({
             + 'JitsiMeetJS.mediaDevices.enumerateDevices instead');
         this.mediaDevices.enumerateDevices(callback);
     },
-    /* eslint-disable max-params */
-    /**
-     * @returns function that can be used to be attached to window.onerror and
-     * if options.enableWindowOnErrorHandler is enabled returns
-     * the function used by the lib.
-     * (function(message, source, lineno, colno, error)).
-     */
-    getGlobalOnErrorHandler(message, source, lineno, colno, error) {
-        logger.error(`UnhandledError: ${message}`, `Script: ${source}`, `Line: ${lineno}`, `Column: ${colno}`, 'StackTrace: ', error);
-        Statistics.reportGlobalError(error);
-    },
     /**
      * Informs lib-jitsi-meet about the current network status.
      *
-     * @param {boolean} isOnline - {@code true} if the internet connectivity is online or {@code false}
+     * @param {object} state - The network info state.
+     * @param {boolean} state.isOnline - {@code true} if the internet connectivity is online or {@code false}
      * otherwise.
      */
     setNetworkInfo({ isOnline }) {
         NetworkInfo.updateNetworkInfo({ isOnline });
     },
     /**
-     * Set the contentHint on the transmitted stream track to indicate
-     * charaterstics in the video stream, which informs PeerConnection
-     * on how to encode the track (to prefer motion or individual frame detail)
-     * @param {MediaStreamTrack} track - the track that is transmitted
-     * @param {String} hint - contentHint value that needs to be set on the track
-     */
-    setVideoTrackContentHints(track, hint) {
-        if ('contentHint' in track) {
-            track.contentHint = hint;
-            if (track.contentHint !== hint) {
-                logger.debug('Invalid video track contentHint');
-            }
-        }
-        else {
-            logger.debug('MediaStreamTrack contentHint attribute not supported');
-        }
-    },
-    precallTest,
-    /* eslint-enable max-params */
-    /**
      * Represents a hub/namespace for utility functionality which may be of
      * interest to lib-jitsi-meet clients.
      */
     util: {
-        AuthUtil,
         ScriptUtil,
         browser
     }
-});
+};
 //# sourceMappingURL=JitsiMeetJS.js.map

@@ -4,6 +4,10 @@ import CodecMimeType from '../../service/RTC/CodecMimeType';
 import { MediaType } from '../../service/RTC/MediaType';
 import browser from '../browser';
 const logger = getLogger(__filename);
+// Default video codec preferences on mobile and desktop endpoints.
+const DESKTOP_VIDEO_CODEC_ORDER = [CodecMimeType.VP9, CodecMimeType.VP8, CodecMimeType.H264];
+const MOBILE_P2P_VIDEO_CODEC_ORDER = [CodecMimeType.H264, CodecMimeType.VP8, CodecMimeType.VP9];
+const MOBILE_VIDEO_CODEC_ORDER = [CodecMimeType.VP8, CodecMimeType.VP9, CodecMimeType.H264];
 /**
  * This class handles the codec selection mechanism for the conference based on the config.js settings.
  * The preferred codec is selected based on the settings and the list of codecs supported by the browser.
@@ -17,115 +21,144 @@ export class CodecSelection {
      *
      * @param {JitsiConference} conference the conference instance
      * @param {*} options
-     * @param {string} options.disabledCodec the codec that needs to be disabled.
-     * @param {boolean} options.enforcePreferredCodec whether codec preference has to be
-     * enforced even when an endpoints that doesn't support the preferred codec joins the call.
-     * Falling back to the standard codec will be skipped when this option is true, endpoints
-     * that do not support the preferred codec may not be able to encode/decode video when this happens.
-     * @param {string} options.jvbCodec the codec that is preferred on jvb connection.
-     * @param {string} options.p2pCodec the codec that is preferred on p2p connection.
+     * @param {string} options.jvb settings (codec list, preferred and disabled) for the jvb connection.
+     * @param {string} options.p2p settings (codec list, preferred and disabled) for the p2p connection.
      */
     constructor(conference, options) {
         this.conference = conference;
         this.options = options;
-        // VP8 cannot be disabled and it will be the default codec when no preference is set.
-        this.disabledCodec = options.disabledCodec === CodecMimeType.VP8
-            ? undefined
-            : this._getCodecMimeType(options.disabledCodec);
-        // Check if the codec values passed are valid.
-        const jvbCodec = this._getCodecMimeType(options.jvbCodec);
-        const p2pCodec = this._getCodecMimeType(options.p2pCodec);
-        this.jvbPreferredCodec = jvbCodec && this._isCodecSupported(jvbCodec) ? jvbCodec : CodecMimeType.VP8;
-        this.p2pPreferredCodec = p2pCodec && this._isCodecSupported(p2pCodec) ? p2pCodec : CodecMimeType.VP8;
-        logger.debug(`Codec preferences for the conference are JVB: ${this.jvbPreferredCodec},
-            P2P: ${this.p2pPreferredCodec}`);
-        if (this.jvbPreferredCodec === CodecMimeType.VP9 && !browser.supportsVP9()) {
-            this.jvbPreferredCodec = CodecMimeType.VP8;
+        this.codecPreferenceOrder = {};
+        for (const connectionType of Object.keys(options)) {
+            // eslint-disable-next-line prefer-const
+            let { disabledCodec, preferredCodec, preferenceOrder } = options[connectionType];
+            const supportedCodecs = new Set(this._getSupportedVideoCodecs(connectionType));
+            // Default preference codec order when no codec preferences are set in config.js
+            let selectedOrder = Array.from(supportedCodecs);
+            if (preferenceOrder) {
+                preferenceOrder = preferenceOrder.map(codec => codec.toLowerCase());
+                // Select all codecs that are supported by the browser.
+                selectedOrder = preferenceOrder.filter(codec => supportedCodecs.has(codec));
+                // Generate the codec list based on the supported codecs and the preferred/disabled (deprecated) settings
+            }
+            else if (preferredCodec || disabledCodec) {
+                disabledCodec = disabledCodec === null || disabledCodec === void 0 ? void 0 : disabledCodec.toLowerCase();
+                preferredCodec = preferredCodec === null || preferredCodec === void 0 ? void 0 : preferredCodec.toLowerCase();
+                // VP8 cannot be disabled since it the default codec.
+                if (disabledCodec && disabledCodec !== CodecMimeType.VP8) {
+                    selectedOrder = selectedOrder.filter(codec => codec !== disabledCodec);
+                }
+                const index = selectedOrder.findIndex(codec => codec === preferredCodec);
+                // Move the preferred codec to the top of the list.
+                if (preferredCodec && index !== -1) {
+                    selectedOrder.splice(index, 1);
+                    selectedOrder.unshift(preferredCodec);
+                }
+            }
+            // Push VP9 to the end of the list so that the client continues to decode VP9 even if its not
+            // preferable to encode VP9 (because of browser bugs on the encoding side or added complexity on mobile
+            // devices). Currently, VP9 encode is supported on Chrome and on Safari (only for p2p).
+            const isVp9EncodeSupported = browser.supportsVP9() || (browser.isWebKitBased() && connectionType === 'p2p');
+            if (!isVp9EncodeSupported || this.conference.isE2EEEnabled()) {
+                const index = selectedOrder.findIndex(codec => codec === CodecMimeType.VP9);
+                if (index !== -1) {
+                    selectedOrder.splice(index, 1);
+                    // Remove VP9 from the list when E2EE is enabled since it is not supported.
+                    // TODO - remove this check when support for VP9-E2EE is introduced.
+                    if (!this.conference.isE2EEEnabled()) {
+                        selectedOrder.push(CodecMimeType.VP9);
+                    }
+                }
+            }
+            logger.info(`Codec preference order for ${connectionType} connection is ${selectedOrder}`);
+            this.codecPreferenceOrder[connectionType] = selectedOrder;
         }
+        this.conference.on(JitsiConferenceEvents._MEDIA_SESSION_STARTED, session => this._selectPreferredCodec(session));
         this.conference.on(JitsiConferenceEvents.USER_JOINED, () => this._selectPreferredCodec());
         this.conference.on(JitsiConferenceEvents.USER_LEFT, () => this._selectPreferredCodec());
     }
     /**
-     * Checks if a given string is a valid video codec mime type.
+     * Returns a list of video codecs that are supported by the browser.
      *
-     * @param {string} codec the codec string that needs to be validated.
-     * @returns {CodecMimeType|null} mime type if valid, null otherwise.
-     * @private
+     * @param {string} connectionType - media connection type, p2p or jvb.
+     * @returns {Array}
      */
-    _getCodecMimeType(codec) {
-        if (typeof codec === 'string') {
-            return Object.values(CodecMimeType).find(value => value === codec.toLowerCase());
+    _getSupportedVideoCodecs(connectionType) {
+        const videoCodecMimeTypes = browser.isMobileDevice() && connectionType === 'p2p'
+            ? MOBILE_P2P_VIDEO_CODEC_ORDER
+            : browser.isMobileDevice() ? MOBILE_VIDEO_CODEC_ORDER : DESKTOP_VIDEO_CODEC_ORDER;
+        if (connectionType === 'p2p' || this.options.jvb.supportsAv1) {
+            videoCodecMimeTypes.push(CodecMimeType.AV1);
         }
-        return null;
+        const supportedCodecs = videoCodecMimeTypes.filter(codec => {
+            var _a, _b, _c, _d;
+            return ((_d = (_c = (_b = (_a = window.RTCRtpReceiver) === null || _a === void 0 ? void 0 : _a.getCapabilities) === null || _b === void 0 ? void 0 : _b.call(_a, MediaType.VIDEO)) === null || _c === void 0 ? void 0 : _c.codecs) !== null && _d !== void 0 ? _d : [])
+                .some(supportedCodec => supportedCodec.mimeType.toLowerCase() === `${MediaType.VIDEO}/${codec}`);
+        });
+        // Select VP8 as the default codec if RTCRtpReceiver.getCapabilities() is not supported by the browser or if it
+        // returns an empty set.
+        !supportedCodecs.length && supportedCodecs.push(CodecMimeType.VP8);
+        return supportedCodecs;
     }
     /**
-     * Checks if the given codec is supported by the browser.
-     *
-     * @param {CodecMimeType} preferredCodec codec to be checked.
-     * @returns {boolean} true if the given codec is supported, false otherwise.
-     * @private
-     */
-    _isCodecSupported(preferredCodec) {
-        // Skip the check on FF and RN because they do not support the getCapabilities API.
-        // It is safe to assume both of them support all the codecs supported by Chrome.
-        if (browser.isFirefox() || browser.isReactNative()) {
-            return true;
-        }
-        return window.RTCRtpReceiver
-            && window.RTCRtpReceiver.getCapabilities
-            && window.RTCRtpReceiver.getCapabilities('video').codecs
-                .some(codec => codec.mimeType.toLowerCase() === `video/${preferredCodec}`);
-    }
-    /**
-     * Handles the {@link JitsiConferenceEvents._MEDIA_SESSION_STARTED} event. Codecs need to be
-     * configured on the media session that is newly created.
-     *
-     * @param {JingleSessionPC} mediaSession media session that started.
-     * @returns {void}
-     * @private
-     */
-    _onMediaSessionStarted(mediaSession) {
-        const preferredCodec = mediaSession.isP2P ? this.p2pPreferredCodec : this.jvbPreferredCodec;
-        const disabledCodec = this.disabledCodec && this._isCodecSupported(this.disabledCodec)
-            ? this.disabledCodec
-            : null;
-        this._selectPreferredCodec(mediaSession, preferredCodec, disabledCodec);
-    }
-    /**
-     * Sets the codec on the media session based on the preferred codec setting and the supported codecs
-     * published by the remote participants in their presence.
+     * Sets the codec on the media session based on the codec preference order configured in config.js and the supported
+     * codecs published by the remote participants in their presence.
      *
      * @param {JingleSessionPC} mediaSession session for which the codec selection has to be made.
-     * @param {CodecMimeType} preferredCodec preferred codec.
-     * @param {CodecMimeType} disabledCodec codec that needs to be disabled.
      */
-    _selectPreferredCodec(mediaSession = null, preferredCodec = null, disabledCodec = null) {
+    _selectPreferredCodec(mediaSession) {
         const session = mediaSession ? mediaSession : this.conference.jvbJingleSession;
-        const currentCodec = preferredCodec ? preferredCodec : this.jvbPreferredCodec;
-        let selectedCodec = currentCodec;
-        if (session && !session.isP2P && !this.options.enforcePreferredCodec) {
-            const remoteParticipants = this.conference.getParticipants().map(participant => participant.getId());
-            for (const remote of remoteParticipants) {
-                const peerMediaInfo = session._signalingLayer.getPeerMediaInfo(remote, MediaType.VIDEO);
-                const peerCodec = peerMediaInfo === null || peerMediaInfo === void 0 ? void 0 : peerMediaInfo.codecType;
-                if (peerCodec
-                    && peerCodec !== currentCodec
-                    && (peerCodec !== CodecMimeType.VP9 || browser.supportsVP9())) {
-                    selectedCodec = peerCodec;
+        if (!session) {
+            return;
+        }
+        const currentCodecOrder = session.peerconnection.getConfiguredVideoCodecs();
+        const isJvbSession = session === this.conference.jvbJingleSession;
+        let localPreferredCodecOrder = isJvbSession ? this.codecPreferenceOrder.jvb : this.codecPreferenceOrder.p2p;
+        // E2EE is curently supported only for VP8 codec.
+        if (this.conference.isE2EEEnabled() && isJvbSession) {
+            localPreferredCodecOrder = [CodecMimeType.VP8];
+        }
+        const remoteParticipants = this.conference.getParticipants().map(participant => participant.getId());
+        const remoteCodecsPerParticipant = remoteParticipants === null || remoteParticipants === void 0 ? void 0 : remoteParticipants.map(remote => {
+            var _a;
+            const peerMediaInfo = session._signalingLayer.getPeerMediaInfo(remote, MediaType.VIDEO);
+            return peerMediaInfo
+                ? (_a = peerMediaInfo.codecList) !== null && _a !== void 0 ? _a : [peerMediaInfo.codecType]
+                : [];
+        });
+        const selectedCodecOrder = localPreferredCodecOrder.reduce((acc, localCodec) => {
+            let codecNotSupportedByRemote = false;
+            // Ignore remote codecs for p2p since only the JVB codec preferences are published in presence.
+            // For p2p, we rely on the codec order present in the remote offer/answer.
+            if (!session.isP2P) {
+                // Remove any codecs that are not supported by any of the remote endpoints. The order of the supported
+                // codecs locally however will remain the same since we want to support asymmetric codecs.
+                for (const remoteCodecs of remoteCodecsPerParticipant) {
+                    codecNotSupportedByRemote = codecNotSupportedByRemote
+                        || !remoteCodecs.find(participantCodec => participantCodec === localCodec);
                 }
             }
+            if (!codecNotSupportedByRemote) {
+                acc.push(localCodec);
+            }
+            return acc;
+        }, []);
+        if (!selectedCodecOrder.length) {
+            logger.warn('Invalid codec list generated because of a user joining/leaving the call');
+            return;
         }
-        session && session.setVideoCodecs(selectedCodec, disabledCodec);
+        // Reconfigure the codecs on the media session.
+        if (!selectedCodecOrder.every((val, index) => val === currentCodecOrder[index])) {
+            session.setVideoCodecs(selectedCodecOrder);
+        }
     }
     /**
-     * Returns the preferred codec for the conference. The preferred codec for the JVB media session
-     * is the one that gets published in presence and a comparision is made whenever a participant joins
-     * or leaves the call.
+     * Returns the current codec preference order for the given connection type.
      *
-     * @returns {CodecMimeType} preferred codec.
+     * @param {String} connectionType The media connection type, 'p2p' or 'jvb'.
+     * @returns {Array<string>}
      */
-    getPreferredCodec() {
-        return this.jvbPreferredCodec;
+    getCodecPreferenceList(connectionType) {
+        return this.codecPreferenceOrder[connectionType];
     }
 }
 //# sourceMappingURL=CodecSelection.js.map

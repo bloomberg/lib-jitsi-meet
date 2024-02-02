@@ -4,8 +4,9 @@ import { XMPPEvents } from '../../service/xmpp/XMPPEvents';
 const FEATURE_KEY = 'features/breakout-rooms';
 const BREAKOUT_ROOM_ACTIONS = {
     ADD: `${FEATURE_KEY}/add`,
+    MOVE_TO_ROOM: `${FEATURE_KEY}/move-to-room`,
     REMOVE: `${FEATURE_KEY}/remove`,
-    MOVE_TO_ROOM: `${FEATURE_KEY}/move-to-room`
+    RENAME: `${FEATURE_KEY}/rename`
 };
 const BREAKOUT_ROOM_EVENTS = {
     MOVE_TO_ROOM: `${FEATURE_KEY}/move-to-room`,
@@ -17,7 +18,7 @@ const logger = getLogger(__filename);
  */
 export default class BreakoutRooms {
     /**
-     * Constructs lobby room.
+     * Constructs breakout room.
      *
      * @param {ChatRoom} room the room we are in.
      */
@@ -68,6 +69,25 @@ export default class BreakoutRooms {
         this._sendMessage(message);
     }
     /**
+     * Changes the subject of a breakout room.
+     *
+     * @param {string} breakoutRoomJid - JID of the room to be removed.
+     * @param {string} subject - A new subject for the breakout room.
+     */
+    renameBreakoutRoom(breakoutRoomJid, subject) {
+        if (!this.isSupported() || !this.room.isModerator()) {
+            logger.error(`Cannot rename breakout room - supported:${this.isSupported()},
+                moderator:${this.room.isModerator()}`);
+            return;
+        }
+        const message = {
+            type: BREAKOUT_ROOM_ACTIONS.RENAME,
+            breakoutRoomJid,
+            subject
+        };
+        this._sendMessage(message);
+    }
+    /**
      * Sends the given participant to the given room.
      *
      * @param {string} participantJid - JID of the participant to be sent to a room.
@@ -85,6 +105,15 @@ export default class BreakoutRooms {
             roomJid
         };
         this._sendMessage(message);
+    }
+    /**
+     * Retrieves whether a breakout room feature is supported.
+     *
+     * @param {string} feature - Feature to check.
+     * @returns Wether the feature is supported.
+     */
+    isFeatureSupported(feature) {
+        return Boolean((this.room.xmpp.breakoutRoomsFeatures || {})[feature]);
     }
     /**
      * Whether Breakout Rooms support is enabled in the backend or not.
@@ -148,11 +177,34 @@ export default class BreakoutRooms {
                 this.room.eventEmitter.emit(XMPPEvents.BREAKOUT_ROOMS_MOVE_TO_ROOM, payload.roomJid);
                 break;
             case BREAKOUT_ROOM_EVENTS.UPDATE: {
-                this._rooms = payload.rooms;
-                this.room.eventEmitter.emit(XMPPEvents.BREAKOUT_ROOMS_UPDATED, payload);
+                const filteredPayload = this._filterUpdatePayload(payload);
+                this._rooms = filteredPayload.rooms;
+                this.room.eventEmitter.emit(XMPPEvents.BREAKOUT_ROOMS_UPDATED, filteredPayload);
                 break;
             }
         }
+    }
+    /**
+     * Filters the hidden participants from the payload.
+     *
+     * @param {Object} payload - The payload of the update message.
+     * @return {Object} - The filtered payload.
+     */
+    _filterUpdatePayload(payload) {
+        const hiddenDomain = this.room.options.hiddenDomain;
+        const { rooms } = payload;
+        const filteredRooms = {};
+        Object.entries(rooms).forEach(([key, room]) => {
+            const { participants = {} } = room;
+            const filteredParticipants = {};
+            Object.entries(participants).forEach(([k, participant]) => {
+                if (Strophe.getDomainFromJid(participant.jid) !== hiddenDomain) {
+                    filteredParticipants[k] = participant;
+                }
+            });
+            filteredRooms[key] = Object.assign(Object.assign({}, room), { participants: filteredParticipants });
+        });
+        return Object.assign(Object.assign({}, payload), { rooms: filteredRooms });
     }
     /**
      * Helper to send a breakout rooms message to the component.

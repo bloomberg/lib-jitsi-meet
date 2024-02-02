@@ -19,8 +19,7 @@ export var JitsiConferenceEvents;
     JitsiConferenceEvents["AUTH_STATUS_CHANGED"] = "conference.auth_status_changed";
     /**
      * Fired just before the statistics module is disposed and it's the last chance
-     * to submit some logs to the statistics service (ex. CallStats if enabled),
-     * before it's disconnected.
+     * to submit some logs to the statistics service before it's disconnected.
      */
     JitsiConferenceEvents["BEFORE_STATISTICS_DISPOSED"] = "conference.beforeStatisticsDisposed";
     /**
@@ -69,6 +68,11 @@ export var JitsiConferenceEvents;
      * A connection to the video bridge's data channel has been established.
      */
     JitsiConferenceEvents["DATA_CHANNEL_OPENED"] = "conference.dataChannelOpened";
+    /**
+     * A connection to the video bridge's data channel has been closed.
+     * This event is only emitted in
+     */
+    JitsiConferenceEvents["DATA_CHANNEL_CLOSED"] = "conference.dataChannelClosed";
     /**
      * A user has changed it display name
      */
@@ -189,30 +193,19 @@ export var JitsiConferenceEvents;
      */
     JitsiConferenceEvents["PRIVATE_MESSAGE_RECEIVED"] = "conference.privateMessageReceived";
     /**
-     * Event fired when JVB sends notification about interrupted/restored user's
-     * ICE connection status or we detect local problem with the video track.
-     * First argument is the ID of the participant and
-     * the seconds is a string indicating if the connection is currently
-     * - active - the connection is active
-     * - inactive - the connection is inactive, was intentionally interrupted by
-     * the bridge
-     * - interrupted - a network problem occurred
-     * - restoring - the connection was inactive and is restoring now
-     *
-     * The current status value can be obtained by calling
-     * JitsiParticipant.getConnectionStatus().
-     */
-    JitsiConferenceEvents["PARTICIPANT_CONN_STATUS_CHANGED"] = "conference.participant_conn_status_changed";
-    /**
      * Indicates that the features of the participant has been changed.
      * TODO: there is a spelling mistake in this event name and associated constants
      */
     JitsiConferenceEvents["PARTCIPANT_FEATURES_CHANGED"] = "conference.partcipant_features_changed";
     /**
-     * Indicates that a the value of a specific property of a specific participant
+     * Indicates that a value of a specific property of a specific participant
      * has changed.
      */
     JitsiConferenceEvents["PARTICIPANT_PROPERTY_CHANGED"] = "conference.participant_property_changed";
+    /**
+     * Indicates the state of sources attached to a given remote participant has changed.
+     */
+    JitsiConferenceEvents["PARTICIPANT_SOURCE_UPDATED"] = "conference.participant_source_updated";
     /**
      * Indicates that the conference has switched between JVB and P2P connections.
      * The first argument of this event is a <tt>boolean</tt> which when set to
@@ -243,7 +236,7 @@ export var JitsiConferenceEvents;
      *     {string} address,
      *     {VideoSIPGWConstants} oldState,
      *     {VideoSIPGWConstants} newState,
-     *     {string} displayName}
+     *     {string} displayName
      * }.
      */
     JitsiConferenceEvents["VIDEO_SIP_GW_SESSION_STATE_CHANGED"] = "conference.videoSIPGWSessionStateChanged";
@@ -325,6 +318,14 @@ export var JitsiConferenceEvents;
      */
     JitsiConferenceEvents["VIDEO_UNMUTE_PERMISSIONS_CHANGED"] = "conference.video_unmute_permissions_changed";
     /**
+     * Event indicating we have received a message from the visitors component.
+     */
+    JitsiConferenceEvents["VISITORS_MESSAGE"] = "conference.visitors_message";
+    /**
+     * Event indicating that our request for promotion was rejected.
+     */
+    JitsiConferenceEvents["VISITORS_REJECTION"] = "conference.visitors_rejection";
+    /**
      * Event indicates that the bot participant type changed.
      */
     JitsiConferenceEvents["BOT_TYPE_CHANGED"] = "conference.bot_type_changed";
@@ -382,10 +383,6 @@ export var JitsiConferenceEvents;
      */
     JitsiConferenceEvents["AV_MODERATION_PARTICIPANT_REJECTED"] = "conference.av_moderation.participant.rejected";
     /**
-     * A new face landmark object is added for a participant
-     */
-    JitsiConferenceEvents["FACE_LANDMARK_ADDED"] = "conference.face_landmark.added";
-    /**
      * Event fired when a participant is requested to join a given (breakout) room.
      */
     JitsiConferenceEvents["BREAKOUT_ROOMS_MOVE_TO_ROOM"] = "conference.breakout-rooms.move-to-room";
@@ -397,8 +394,10 @@ export var JitsiConferenceEvents;
      * Event fired when the conference metadata is updated.
      */
     JitsiConferenceEvents["METADATA_UPDATED"] = "conference.metadata.updated";
+    JitsiConferenceEvents["E2EE_VERIFICATION_AVAILABLE"] = "conference.e2ee.verification.available";
+    JitsiConferenceEvents["E2EE_VERIFICATION_READY"] = "conference.e2ee.verification.ready";
+    JitsiConferenceEvents["E2EE_VERIFICATION_COMPLETED"] = "conference.e2ee.verification.completed";
 })(JitsiConferenceEvents || (JitsiConferenceEvents = {}));
-;
 // exported for backward compatibility
 export const AUDIO_INPUT_STATE_CHANGE = JitsiConferenceEvents.AUDIO_INPUT_STATE_CHANGE;
 export const AUDIO_UNMUTE_PERMISSIONS_CHANGED = JitsiConferenceEvents.AUDIO_UNMUTE_PERMISSIONS_CHANGED;
@@ -414,15 +413,20 @@ export const CONNECTION_ESTABLISHED = JitsiConferenceEvents.CONNECTION_ESTABLISH
 export const CONNECTION_INTERRUPTED = JitsiConferenceEvents.CONNECTION_INTERRUPTED;
 export const CONNECTION_RESTORED = JitsiConferenceEvents.CONNECTION_RESTORED;
 export const DATA_CHANNEL_OPENED = JitsiConferenceEvents.DATA_CHANNEL_OPENED;
+export const DATA_CHANNEL_CLOSED = JitsiConferenceEvents.DATA_CHANNEL_CLOSED;
 export const DISPLAY_NAME_CHANGED = JitsiConferenceEvents.DISPLAY_NAME_CHANGED;
 export const DOMINANT_SPEAKER_CHANGED = JitsiConferenceEvents.DOMINANT_SPEAKER_CHANGED;
 export const CONFERENCE_CREATED_TIMESTAMP = JitsiConferenceEvents.CONFERENCE_CREATED_TIMESTAMP;
 export const DTMF_SUPPORT_CHANGED = JitsiConferenceEvents.DTMF_SUPPORT_CHANGED;
 export const ENDPOINT_MESSAGE_RECEIVED = JitsiConferenceEvents.ENDPOINT_MESSAGE_RECEIVED;
 export const ENDPOINT_STATS_RECEIVED = JitsiConferenceEvents.ENDPOINT_STATS_RECEIVED;
+export const E2EE_VERIFICATION_AVAILABLE = JitsiConferenceEvents.E2EE_VERIFICATION_AVAILABLE;
+export const E2EE_VERIFICATION_READY = JitsiConferenceEvents.E2EE_VERIFICATION_READY;
+export const E2EE_VERIFICATION_COMPLETED = JitsiConferenceEvents.E2EE_VERIFICATION_COMPLETED;
 export const JVB121_STATUS = JitsiConferenceEvents.JVB121_STATUS;
 export const KICKED = JitsiConferenceEvents.KICKED;
 export const PARTICIPANT_KICKED = JitsiConferenceEvents.PARTICIPANT_KICKED;
+export const PARTICIPANT_SOURCE_UPDATED = JitsiConferenceEvents.PARTICIPANT_SOURCE_UPDATED;
 export const LAST_N_ENDPOINTS_CHANGED = JitsiConferenceEvents.LAST_N_ENDPOINTS_CHANGED;
 export const FORWARDED_SOURCES_CHANGED = JitsiConferenceEvents.FORWARDED_SOURCES_CHANGED;
 export const LOCK_STATE_CHANGED = JitsiConferenceEvents.LOCK_STATE_CHANGED;
@@ -435,7 +439,6 @@ export const NO_AUDIO_INPUT = JitsiConferenceEvents.NO_AUDIO_INPUT;
 export const NOISY_MIC = JitsiConferenceEvents.NOISY_MIC;
 export const NON_PARTICIPANT_MESSAGE_RECEIVED = JitsiConferenceEvents.NON_PARTICIPANT_MESSAGE_RECEIVED;
 export const PRIVATE_MESSAGE_RECEIVED = JitsiConferenceEvents.PRIVATE_MESSAGE_RECEIVED;
-export const PARTICIPANT_CONN_STATUS_CHANGED = JitsiConferenceEvents.PARTICIPANT_CONN_STATUS_CHANGED;
 export const PARTCIPANT_FEATURES_CHANGED = JitsiConferenceEvents.PARTCIPANT_FEATURES_CHANGED;
 export const PARTICIPANT_PROPERTY_CHANGED = JitsiConferenceEvents.PARTICIPANT_PROPERTY_CHANGED;
 export const P2P_STATUS = JitsiConferenceEvents.P2P_STATUS;
@@ -460,6 +463,8 @@ export const USER_LEFT = JitsiConferenceEvents.USER_LEFT;
 export const USER_ROLE_CHANGED = JitsiConferenceEvents.USER_ROLE_CHANGED;
 export const USER_STATUS_CHANGED = JitsiConferenceEvents.USER_STATUS_CHANGED;
 export const VIDEO_UNMUTE_PERMISSIONS_CHANGED = JitsiConferenceEvents.VIDEO_UNMUTE_PERMISSIONS_CHANGED;
+export const VISITORS_MESSAGE = JitsiConferenceEvents.VISITORS_MESSAGE;
+export const VISITORS_REJECTION = JitsiConferenceEvents.VISITORS_REJECTION;
 export const BOT_TYPE_CHANGED = JitsiConferenceEvents.BOT_TYPE_CHANGED;
 export const LOBBY_USER_JOINED = JitsiConferenceEvents.LOBBY_USER_JOINED;
 export const LOBBY_USER_UPDATED = JitsiConferenceEvents.LOBBY_USER_UPDATED;
@@ -469,7 +474,6 @@ export const AV_MODERATION_REJECTED = JitsiConferenceEvents.AV_MODERATION_REJECT
 export const AV_MODERATION_CHANGED = JitsiConferenceEvents.AV_MODERATION_CHANGED;
 export const AV_MODERATION_PARTICIPANT_APPROVED = JitsiConferenceEvents.AV_MODERATION_PARTICIPANT_APPROVED;
 export const AV_MODERATION_PARTICIPANT_REJECTED = JitsiConferenceEvents.AV_MODERATION_PARTICIPANT_REJECTED;
-export const FACE_LANDMARK_ADDED = JitsiConferenceEvents.FACE_LANDMARK_ADDED;
 export const BREAKOUT_ROOMS_MOVE_TO_ROOM = JitsiConferenceEvents.BREAKOUT_ROOMS_MOVE_TO_ROOM;
 export const BREAKOUT_ROOMS_UPDATED = JitsiConferenceEvents.BREAKOUT_ROOMS_UPDATED;
 export const METADATA_UPDATED = JitsiConferenceEvents.METADATA_UPDATED;
