@@ -9,7 +9,6 @@ import { STANDARD_CODEC_SETTINGS } from '../../service/RTC/StandardVideoSettings
 import VideoEncoderScalabilityMode from '../../service/RTC/VideoEncoderScalabilityMode';
 import { VideoType } from '../../service/RTC/VideoType';
 import browser from '../browser';
-import FeatureFlags from '../flags/FeatureFlags';
 const logger = getLogger(__filename);
 const DESKTOP_SHARE_RATE = 500000;
 const SIM_LAYER_1_RID = '1';
@@ -56,9 +55,9 @@ export class TPCUtils {
                     && (typeof codecConfig.scalabilityModeEnabled === 'undefined'
                         || codecConfig.scalabilityModeEnabled);
                 if (scalabilityModeEnabled) {
-                    typeof codecConfig.useSimulcast !== undefined
+                    typeof codecConfig.useSimulcast !== 'undefined'
                         && (this.codecSettings[codec].useSimulcast = codecConfig.useSimulcast);
-                    typeof codecConfig.useKSVC !== undefined
+                    typeof codecConfig.useKSVC !== 'undefined'
                         && (this.codecSettings[codec].useKSVC = codecConfig.useKSVC);
                 }
                 else {
@@ -342,7 +341,6 @@ export class TPCUtils {
      */
     calculateEncodingsBitrates(localVideoTrack, codec, newHeight) {
         var _a, _b;
-        const videoType = localVideoTrack.getVideoType();
         const desktopShareBitrate = ((_b = (_a = this.pc.options) === null || _a === void 0 ? void 0 : _a.videoQuality) === null || _b === void 0 ? void 0 : _b.desktopbitrate) || DESKTOP_SHARE_RATE;
         const encodingsBitrates = this._getVideoStreamEncodings(localVideoTrack.getVideoType(), codec)
             .map((encoding, idx) => {
@@ -355,12 +353,6 @@ export class TPCUtils {
             // Multiple video streams.
             if (this._isScreenshareBitrateCapped(localVideoTrack)) {
                 bitrate = desktopShareBitrate;
-            }
-            else if (videoType === VideoType.DESKTOP && browser.isChromiumBased() && !this.pc.usesUnifiedPlan()) {
-                // For high fps screenshare, 'maxBitrate' setting must be cleared on Chrome in plan-b, because
-                // if simulcast is enabled for screen and maxBitrates are set then Chrome will not send the
-                // desktop stream.
-                bitrate = undefined;
             }
             return bitrate;
         });
@@ -477,16 +469,17 @@ export class TPCUtils {
         const hasIncorrectConfig = this.pc._capScreenshareBitrate
             ? parameters.encodings.every(encoding => encoding.active)
             : parameters.encodings.some(encoding => !encoding.active);
+        const videoType = localVideoTrack.getVideoType();
         // Check if every encoding is active for screenshare track when low fps screenshare is configured or some
         // of the encodings are disabled when high fps screenshare is configured. In both these cases, the track
         // encodings need to be reconfigured. This is needed when p2p->jvb switch happens and new sender constraints
         // are not received by the client.
-        if (localVideoTrack.getVideoType() === VideoType.DESKTOP && hasIncorrectConfig) {
+        if (videoType === VideoType.DESKTOP && hasIncorrectConfig) {
             return null;
         }
         for (const encoding in parameters.encodings) {
             if (parameters.encodings[encoding].active) {
-                const encodingConfig = this._getVideoStreamEncodings(localVideoTrack.getVideoType(), this.pc.getConfiguredVideoCodec());
+                const encodingConfig = this._getVideoStreamEncodings(videoType, codec);
                 const scaleResolutionDownBy = this.pc.isSpatialScalabilityOn()
                     ? encodingConfig[encoding].scaleResolutionDownBy
                     : parameters.encodings[encoding].scaleResolutionDownBy;
@@ -585,8 +578,7 @@ export class TPCUtils {
         const mediaType = (_a = newTrack === null || newTrack === void 0 ? void 0 : newTrack.getType()) !== null && _a !== void 0 ? _a : oldTrack === null || oldTrack === void 0 ? void 0 : oldTrack.getType();
         const localTracks = this.pc.getLocalTracks(mediaType);
         const track = (_b = newTrack === null || newTrack === void 0 ? void 0 : newTrack.getTrack()) !== null && _b !== void 0 ? _b : null;
-        const isNewLocalSource = FeatureFlags.isMultiStreamSendSupportEnabled()
-            && (localTracks === null || localTracks === void 0 ? void 0 : localTracks.length)
+        const isNewLocalSource = (localTracks === null || localTracks === void 0 ? void 0 : localTracks.length)
             && !oldTrack
             && newTrack
             && !localTracks.find(t => t === newTrack);

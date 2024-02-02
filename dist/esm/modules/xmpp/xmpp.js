@@ -194,17 +194,6 @@ export default class XMPP extends Listenable {
             && (typeof this.options.enableTcc === 'undefined' || this.options.enableTcc)) {
             this.caps.addFeature('http://jitsi.org/tcc');
         }
-        // this is dealt with by SDP O/A so we don't need to announce this
-        // XEP-0293
-        // this.caps.addFeature('urn:xmpp:jingle:apps:rtp:rtcp-fb:0');
-        // XEP-0294
-        // this.caps.addFeature('urn:xmpp:jingle:apps:rtp:rtp-hdrext:0');
-        // this.caps.addFeature('urn:ietf:rfc:5576'); // a=ssrc
-        // Enable Lipsync ?
-        if (browser.isChromiumBased() && this.options.enableLipSync === true) {
-            logger.info('Lip-sync enabled !');
-            this.caps.addFeature('http://jitsi.org/meet/lipsync');
-        }
         if (this.connection.rayo) {
             this.caps.addFeature('urn:xmpp:rayo:client:1');
         }
@@ -439,6 +428,7 @@ export default class XMPP extends Listenable {
         if (!msg) {
             return null;
         }
+        FAILURE_REGEX.lastIndex = 0;
         const matches = FAILURE_REGEX.exec(msg);
         return matches ? matches[1] : null;
     }
